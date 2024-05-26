@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
+import yfinance as yf
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -282,31 +283,26 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-def fetch_recent_5_hours_data(stock_code, APP_KEY, APP_SECRET, URL_BASE):
-    now = datetime.datetime.now()
-    recent_hours = []
+def fetch_recent_5_hours_data_yahoo(stock_code):
     
-    while len(recent_hours) < 5:
-        hour = now - datetime.timedelta(hours=len(recent_hours) + 1)
+    stock = yf.Ticker(stock_code)
+    data = stock.history(period="5h", interval="1h")
+
+    for idx, row in data.iterrows():
+        time_key = idx.strftime('%Y-%m-%d %H')
+        open_price = row['Open']
+        high_price = row['High']
+        low_price = row['Low']
+        close_price = row['Close']
+        volume = row['Volume']
         
-        # 주말 처리
-        if hour.weekday() == 5:  # 토요일인 경우
-            hour -= datetime.timedelta(days=1)
-        elif hour.weekday() == 6:  # 일요일인 경우
-            hour -= datetime.timedelta(days=2)
-        
-        # 영업 시간 처리
-        if hour.hour < 9:
-            hour = hour.replace(hour=15, minute=0, second=0) - datetime.timedelta(days=1)
-        elif hour.hour > 15:
-            hour = hour.replace(hour=15, minute=0, second=0)
-        
-        recent_hours.append(hour)
+        cursor.execute('''
+        INSERT OR REPLACE INTO price_info (time_key, stock_code, high, low, open, close, volume)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (time_key, stock_code, high_price, low_price, open_price, close_price, volume))
     
-    for hour in sorted(recent_hours):
-        current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
-        update_price_info(current_price, current_volume, hour, stock_code)
-        time.sleep(1)  # API 호출 간의 시간 간격을 두기 위해 잠시 대기
+    conn.commit()
+
 
 
 def get_stock_balance(APP_KEY, APP_SECRET, URL_BASE):
