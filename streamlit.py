@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
+import numpy as np
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -64,7 +65,7 @@ def get_model_prediction(stock_code, current_hour_key):
     valid_loader=stock.data_loader(stock.seq_len, 'valid')
     test_loader=stock.data_loader(stock.seq_len, 't')
     stock.create_model(1, 0.2)
-    stock.model.load_state_dict(torch.load('chg_close_diff.pth'))
+    stock.model.load_state_dict(torch.load('chg_close_loss.pth'))
     loss=stock.train(train_loader, valid_loader, test_loader, 10, 0.1, 20, 'test')
     predicted_class, act=stock.pred_value('t')
 
