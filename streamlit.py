@@ -283,9 +283,28 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-def fetch_recent_5_hours_data(stock_code):
+def download_krx_data():
+    url = "http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&searchType=13"
+    df = pd.read_html(url, header=0)[0]
+    df['종목코드'] = df['종목코드'].map('{:06d}'.format)
+    df = df[['종목코드', '회사명', '업종', '주요제품', '상장일', '결산월', '대표전화', '홈페이지', '지역']]
+    return df
+
+def get_market_type(stock_code, krx_data):
+    if stock_code in krx_data['종목코드'].values:
+        return "코스피"
+    else:
+        return "코스닥"
     
-    stock = yf.Ticker(str(stock_code)+'.KS')
+
+
+def fetch_recent_5_hours_data(stock_code):
+    krx_data = download_krx_data()
+    market_type = get_market_type(stock_code, krx_data)
+    if market_type == "코스피":
+        stock = yf.Ticker(str(stock_code)+'.KS')
+    else:
+        stock = yf.Ticker(str(stock_code)+'.KQ')
     data = stock.history(period="5h", interval="1h")
 
     for idx, row in data.iterrows():
