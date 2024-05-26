@@ -10,7 +10,7 @@ import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 from io import StringIO
-from alpha_vantage.timeseries import TimeSeries
+from datetime import datetime, timedelta
 import pytz
 
 # model py파일 import
@@ -285,40 +285,49 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-# Alpha Vantage API 설정
-ALPHA_VANTAGE_API_KEY = '4K25W2F5857KVDRL'  # Alpha Vantage API 키 입력
-ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
-
 def fetch_recent_5_hours_data(stock_code):
-    try:
-        data, _ = ts.get_intraday(symbol=stock_code, interval='60min', outputsize='compact')
-        if data.empty:
-            raise ValueError("No data fetched")
-    except Exception as e:
-        st.error(f"Error fetching data for stock code {stock_code}: {e}")
-        return None
+    ACCESS_TOKEN = get_access_token(APP_KEY, APP_SECRET, URL_BASE)
+    headers = {
+        'Content-Type': 'application/json',
+        'authorization': f'Bearer {ACCESS_TOKEN}',
+        'appKey': APP_KEY,
+        'appSecret': APP_SECRET,
+        'tr_id': 'FHKST01010100'
+    }
+    
+    params = {
+        'fid_cond_mrkt_div_code': 'J',
+        'fid_input_iscd': stock_code
+    }
+
+    data = []
+    for i in range(5):
+        time_point = (datetime.now() - timedelta(hours=i)).strftime('%Y%m%d%H%M%S')
+        url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-time-prices"
+        response = requests.get(url, headers=headers, params={**params, 'fid_etc_cls_code': time_point})
+        if response.status_code == 200:
+            data.append(response.json())
+        else:
+            st.error(f"Error fetching data for {stock_code} at {time_point}: {response.json()}")
     return data
 
 def save_data_to_db(data, stock_code):
     kst = pytz.timezone('Asia/Seoul')
-    data.index = data.index.tz_localize('UTC').tz_convert(kst)
-    data = data.tail(5)  # 최근 5시간 데이터만 저장
-
-    for idx, row in data.iterrows():
-        time_key = idx.strftime('%Y-%m-%d %H')
-        open_price = row['1. open']
-        high_price = row['2. high']
-        low_price = row['3. low']
-        close_price = row['4. close']
-        volume = row['5. volume']
-        
-        cursor.execute('''
-        INSERT OR REPLACE INTO price_info (time_key, stock_code, high, low, open, close, volume)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (time_key, stock_code, high_price, low_price, open_price, close_price, volume))
+    for entry in data:
+        for record in entry['output']:
+            time_key = datetime.strptime(record['stck_bsop_date'] + record['stck_clpr'], '%Y%m%d%H%M%S').astimezone(kst).strftime('%Y-%m-%d %H')
+            open_price = float(record['stck_oprc'])
+            high_price = float(record['stck_hgpr'])
+            low_price = float(record['stck_lwpr'])
+            close_price = float(record['stck_prpr'])
+            volume = int(record['acml_vol'])
+            
+            cursor.execute('''
+            INSERT OR REPLACE INTO price_info (time_key, stock_code, high, low, open, close, volume)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (time_key, stock_code, high_price, low_price, open_price, close_price, volume))
     
     conn.commit()
-
 
 
 def get_stock_balance(APP_KEY, APP_SECRET, URL_BASE):
