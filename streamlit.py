@@ -289,21 +289,22 @@ def fetch_recent_5_hours_data(stock_code):
     
     try:
         stock = yf.Ticker(str(stock_code) + '.KS')
-        data = stock.history(period="5h", interval="1h")
+        data = stock.history(period="6h", interval="1h")
         if data.empty:
             raise ValueError("No data fetched for Kospi")
 
     except Exception as e:
         try:
             stock = yf.Ticker(str(stock_code) + '.KQ')
-            data = stock.history(period="5h", interval="1h")
+            data = stock.history(period="6h", interval="1h")
+            time.sleep(5)
             if data.empty:
                 raise ValueError("No data fetched for KOSDAQ")
         except Exception as e:
             st.error(f"Error fetching data for stock code {stock_code}: {e}")
             return
     
-    for idx, row in data.iterrows():
+    for idx, row in data.iloc[1:,].iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
         open_price = row['Open']
         high_price = row['High']
