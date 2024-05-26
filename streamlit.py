@@ -296,7 +296,11 @@ def get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL):
     }
     url = f"{BASE_URL}/oauth2/tokenP"
     response = requests.post(url, headers=headers, json=body)
-    return response.json()['access_token']
+    if response.status_code == 200:
+        return response.json().get('access_token')
+    else:
+        st.error(f"Failed to get access token: {response.status_code} {response.text}")
+        raise Exception("Failed to get access token")
 
 def fetch_recent_5_hours_data(stock_code, API_KEY, SECRET_KEY, BASE_URL):
     access_token = get_access_token(API_KEY, SECRET_KEY, BASE_URL)
