@@ -283,7 +283,7 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-def fetch_recent_5_hours_data_yahoo(stock_code):
+def fetch_recent_5_hours_data(stock_code):
     
     stock = yf.Ticker(stock_code)
     data = stock.history(period="5h", interval="1h")
