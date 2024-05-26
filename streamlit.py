@@ -541,14 +541,14 @@ if st.button('자동매매 시작'):
             t_start = t_now.replace(hour=9, minute=0, second=0, microsecond=0)
             t_sell = t_now.replace(hour=15, minute=00, second=0, microsecond=0)
             t_end = t_now.replace(hour=15, minute=20, second=0, microsecond=0)
-            today = datetime.datetime.today().weekday()
+            today = t_now.weekday()
 
             if today in [5]:  # 토요일이면 자동 종료
                 send_message("토요일이므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
-            if (t_now >= t_end) or (t_now<=t_start):
-                send_message(f"현재 시각: {t_now} \n 오후 3시가 지났으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
+            if (t_now >= t_end + datetime.timedelta(hours=1)) or (t_now<=t_start-datetime.timedelta(hours=1)):
+                send_message(f"현재 시각: {t_now} \n 장이 마감되었으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
             if t_start <= t_now <= t_sell:
@@ -616,6 +616,17 @@ if st.button('자동매매 시작'):
         st.error(f"오류 발생: {e}")
 
     finally:
+        if bought:
+                stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE)
+                qty = stock_dict.get(stock_code, 0)
+                if qty > 0:
+                    sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE)
+                    bought = False
+                    sell_price = current_price
+                    profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
+                    total_profit += profit
+                    send_message(f"강제 매도: {stock_code}", DISCORD_WEBHOOK_URL)
+                    st.write(f"강제 매도: {stock_code}")
         send_message("프로그램이 종료되었습니다.", DISCORD_WEBHOOK_URL)
         st.write("프로그램이 종료되었습니다.")
         st.session_state.stop = False  # Reset stop state
