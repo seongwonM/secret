@@ -4,3 +4,4 @@ requests
 transformers
 torch
 scikit-learn
+python-binance

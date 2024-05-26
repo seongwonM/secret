@@ -43,11 +43,9 @@ conn.commit()
 
 # 모델1 부분
 
-stock=Stock()
-
 def get_model_prediction(stock_code, current_hour_key):
     # current_hour_key 이전 10개 데이터 가져오기
-    cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, stock.seq_len))
+    cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, 5))
     rows = cursor.fetchall()
 
     if len(rows) < stock.seq_len:
@@ -465,8 +463,8 @@ if st.button('자동매매 시작'):
 
             t_now = datetime.datetime.now()
             t_start = t_now.replace(hour=9, minute=0, second=0, microsecond=0)
-            t_sell = t_now.replace(hour=14, minute=50, second=0, microsecond=0)
-            t_end = t_now.replace(hour=15, minute=0, second=0, microsecond=0)
+            t_sell = t_now.replace(hour=15, minute=00, second=0, microsecond=0)
+            t_end = t_now.replace(hour=15, minute=20, second=0, microsecond=0)
             today = datetime.datetime.today().weekday()
 
             if today in [5, 6]:  # 토요일이나 일요일이면 자동 종료
