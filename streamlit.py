@@ -10,7 +10,7 @@ import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 from io import StringIO
-from datetime import datetime, timedelta
+from datetime import timedelta
 import pytz
 
 # model py파일 import
