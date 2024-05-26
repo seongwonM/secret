@@ -285,7 +285,7 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
 
 def fetch_recent_5_hours_data(stock_code):
     
-    stock = yf.Ticker(stock_code+'.KS')
+    stock = yf.Ticker(str(stock_code)+'.KS')
     data = stock.history(period="5h", interval="1h")
 
     for idx, row in data.iterrows():
