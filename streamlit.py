@@ -446,6 +446,12 @@ def sell(code, qty, APP_KEY, APP_SECRET, URL_BASE):
         send_message(f"[매도 실패]{str(res.json())}", DISCORD_WEBHOOK_URL)
         return False
 
+if 'stop' not in st.session_state:
+    st.session_state.stop = False
+
+def stop_button_callback():
+    st.session_state.stop = True
+
 # Streamlit UI
 st.title('자동 주식 매매 프로그램')
 
@@ -512,7 +518,6 @@ if st.button('자동매매 시작'):
         ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
         total_cash = get_balance(APP_KEY, APP_SECRET, URL_BASE)
         bought = False
-        bought_time = None
         buy_price = 0
         sell_price = 0
         total_profit = 0
@@ -521,8 +526,10 @@ if st.button('자동매매 시작'):
         send_message('===국내 주식 자동매매 프로그램을 시작합니다===', DISCORD_WEBHOOK_URL)
         
         profit_display = st.sidebar.empty()
+        stop_button_placeholder = st.empty()
+        stop_button_placeholder.button('종료', key='stop_button', on_click=stop_button_callback)
 
-        while True:
+        while not st.session_state.stop:
             loop_start_time = datetime.datetime.now()
 
             t_now = datetime.datetime.now()
@@ -544,6 +551,7 @@ if st.button('자동매매 시작'):
 
             current_hour_key = t_now.strftime('%Y-%m-%d %H')  # current_hour_key 할당
 
+            # 매수
             if t_start < t_now < t_sell and not bought:
                 target_price = get_target_price_change(stock_code)
                 model_prediction = get_model_prediction(stock_code, current_hour_key)
@@ -555,14 +563,12 @@ if st.button('자동매매 시작'):
                         if result:
                             bought = True
                             buy_price = current_price
-                            # 매도 시간을 현재 시간의 마지막 초로 설정
-                            bought_time = t_now.replace(minute=59, second=59)
                             send_message(f"{stock_code} 매수 완료", DISCORD_WEBHOOK_URL)
                             st.write(f"{stock_code} 매수 완료")
 
             sell_price = get_target_price_change(stock_code)
 
-            # 특정 시간의 마지막 초에 매도
+            # 매도
             if bought and (target_price <= sell_price or current_price > model_prediction[0][0]):
                 stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE)
                 qty = stock_dict.get(stock_code, 0)
@@ -598,10 +604,6 @@ if st.button('자동매매 시작'):
             sleep_time = max(5 - elapsed_time, 0)
 
             time.sleep(sleep_time)
-
-            if st.button('종료'):
-                profit_display.write(f"오늘의 수익률: {total_profit:.2f}%")
-                break
 
     except Exception as e:
         send_message(f"[오류 발생]{e}", DISCORD_WEBHOOK_URL)
