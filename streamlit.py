@@ -9,8 +9,9 @@ import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
-import yfinance as yf
 from io import StringIO
+from alpha_vantage.timeseries import TimeSeries
+import pytz
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -284,36 +285,32 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-@st.cache
+# Alpha Vantage API 설정
+ALPHA_VANTAGE_API_KEY = 'YOUR_ALPHA_VANTAGE_API_KEY'  # Alpha Vantage API 키 입력
+ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+
 def fetch_recent_5_hours_data(stock_code):
-    data = None
-    
     try:
-        stock = yf.Ticker(str(stock_code) + '.KS')
-        data = stock.history(period="6h", interval="1h")
+        data, _ = ts.get_intraday(symbol=stock_code, interval='60min', outputsize='compact')
         if data.empty:
-            raise ValueError("No data fetched for Kospi")
-
+            raise ValueError("No data fetched")
     except Exception as e:
-        try:
-            stock = yf.Ticker(str(stock_code) + '.KQ')
-            data = stock.history(period="6h", interval="1h")
-            if data.empty:
-                raise ValueError("No data fetched for KOSDAQ")
-        except Exception as e:
-            st.error(f"Error fetching data for stock code {stock_code}: {e}")
-            return None
-
+        st.error(f"Error fetching data for stock code {stock_code}: {e}")
+        return None
     return data
 
 def save_data_to_db(data, stock_code):
+    kst = pytz.timezone('Asia/Seoul')
+    data.index = data.index.tz_localize('UTC').tz_convert(kst)
+    data = data.tail(5)  # 최근 5시간 데이터만 저장
+
     for idx, row in data.iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
-        open_price = row['Open']
-        high_price = row['High']
-        low_price = row['Low']
-        close_price = row['Close']
-        volume = row['Volume']
+        open_price = row['1. open']
+        high_price = row['2. high']
+        low_price = row['3. low']
+        close_price = row['4. close']
+        volume = row['5. volume']
         
         cursor.execute('''
         INSERT OR REPLACE INTO price_info (time_key, stock_code, high, low, open, close, volume)
