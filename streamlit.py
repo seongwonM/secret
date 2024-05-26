@@ -446,11 +446,6 @@ def sell(code, qty, APP_KEY, APP_SECRET, URL_BASE):
         send_message(f"[매도 실패]{str(res.json())}", DISCORD_WEBHOOK_URL)
         return False
 
-if 'stop' not in st.session_state:
-    st.session_state.stop = False
-
-def stop_button_callback():
-    st.session_state.stop = True
 
 # Streamlit UI
 st.title('자동 주식 매매 프로그램')
@@ -512,6 +507,11 @@ if st.button('DB 초기화'):
     except Exception as e:
         st.error(f'데이터베이스 초기화 중 오류가 발생했습니다: {e}')
 
+if 'stop' not in st.session_state:
+    st.session_state.stop = False
+
+def stop_button_callback():
+    st.session_state.stop = True
 
 if st.button('자동매매 시작'):
     try:
