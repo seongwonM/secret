@@ -303,7 +303,7 @@ def get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL):
         raise Exception("Failed to get access token")
 
 def fetch_recent_5_hours_data(stock_code, API_KEY, SECRET_KEY, BASE_URL):
-    access_token = get_access_token(API_KEY, SECRET_KEY, BASE_URL)
+    access_token = get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL)
     headers = {
         'Content-Type': 'application/json',
         'authorization': f'Bearer {access_token}',
