@@ -288,7 +288,7 @@ def fetch_recent_5_hours_data(stock_code):
     try:
         stock = yf.Ticker(str(stock_code)+'.KS')
         data = stock.history(period="5h", interval="1h")
-        
+
     except:
         stock = yf.Ticker(str(stock_code)+'.KQ')
         data = stock.history(period="5h", interval="1h")
@@ -477,7 +477,7 @@ if st.button('현금 잔고 조회'):
 # 특정 주식 종목 데이터 조회 버튼
 if st.button('종목 데이터 조회'):
     try:
-        cursor.execute('SELECT * FROM price_info WHERE stock_code = ?', (stock_code,))
+        cursor.execute('SELECT * FROM price_info WHERE stock_code = ?', (stock_code))
         rows = cursor.fetchall()
         if rows:
             st.write(f'{stock_code}의 데이터:')
