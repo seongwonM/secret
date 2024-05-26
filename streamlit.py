@@ -12,6 +12,7 @@ import numpy as np
 from io import StringIO
 from datetime import timedelta
 import pytz
+from y_data import y_loader
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -285,74 +286,23 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-def get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL):
-    headers = {
-        'content-type': 'application/json',
-    }
-    body = {
-        "grant_type": "client_credentials",
-        "appkey": API_KEY,
-        "appsecret": SECRET_KEY
-    }
-    url = f"{BASE_URL}/oauth2/tokenP"
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code == 200:
-        return response.json().get('access_token')
-    else:
-        st.error(f"Failed to get access token: {response.status_code} {response.text}")
-        raise Exception("Failed to get access token")
-
-def fetch_recent_5_hours_data(stock_code, API_KEY, SECRET_KEY, BASE_URL):
-    access_token = get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL)
-    headers = {
-        'Content-Type': 'application/json',
-        'authorization': f'Bearer {access_token}',
-        'appKey': API_KEY,
-        'appSecret': SECRET_KEY,
-        'tr_id': 'FHKST01010100'
-    }
-    
-    params = {
-        'fid_cond_mrkt_div_code': 'J',
-        'fid_input_iscd': stock_code
-    }
-
-    data = []
-    for i in range(5):
-        time_point = (datetime.datetime.now() - timedelta(hours=i)).strftime('%Y%m%d%H%M%S')
-        url = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-prices"
-        response = requests.get(url, headers=headers, params={**params, 'fid_etc_cls_code': time_point})
-        response_text = response.text
-        try:
-            response_data = response.json()
-            if response.status_code == 200 and 'output' in response_data:
-                data.append(response_data)
-            else:
-                st.error(f"Error fetching data for {stock_code} at {time_point}: {response_text}")
-        except requests.exceptions.JSONDecodeError:
-            st.error(f"Error decoding JSON for {stock_code} at {time_point}: {response_text}")
-        except Exception as e:
-            st.error(f"Unexpected error: {e}, response text: {response_text}")
-    return data
-
-def save_data_to_db(data, stock_code):
-    kst = pytz.timezone('Asia/Seoul')
-    for entry in data:
-        for record in entry['output']:
-            time_key = datetime.strptime(record['stck_bsop_date'] + record['stck_clpr'], '%Y%m%d%H%M%S').astimezone(kst).strftime('%Y-%m-%d %H')
-            open_price = float(record['stck_oprc'])
-            high_price = float(record['stck_hgpr'])
-            low_price = float(record['stck_lwpr'])
-            close_price = float(record['stck_prpr'])
-            volume = int(record['acml_vol'])
-            
-            cursor.execute('''
-            INSERT OR REPLACE INTO price_info (time_key, stock_code, high, low, open, close, volume)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (time_key, stock_code, high_price, low_price, open_price, close_price, volume))
+def fetch_recent_5_hours_data(stock_code):
+    y_loader(stock_code)
+    data=pd.read_csv(f'{stock_code}.csv').tail(5)
+    for idx, row in data.iterrows():
+        time_key = idx.strftime('%Y-%m-%d %H')
+        open_price = row['Open']
+        high_price = row['High']
+        low_price = row['Low']
+        close_price = row['Close']
+        volume = row['Volume']
+        
+        cursor.execute('''
+        INSERT OR REPLACE INTO price_info (time_key, stock_code, high, low, open, close, volume)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (time_key, stock_code, high_price, low_price, open_price, close_price, volume))
     
     conn.commit()
-
 
 def get_stock_balance(APP_KEY, APP_SECRET, URL_BASE):
     """주식 잔고조회"""
@@ -532,12 +482,11 @@ if st.button('종목 데이터 조회'):
         st.error(f'종목 데이터를 가져오는 데 오류가 발생했습니다: {e}')
 
 if st.button('최근 5시간 데이터 미리 가져오기'):
-    data = fetch_recent_5_hours_data(stock_code, APP_KEY, APP_SECRET, URL_BASE)
-    if data is not None:
-        save_data_to_db(data, stock_code)
+    try:
+        fetch_recent_5_hours_data(stock_code, APP_KEY, APP_SECRET, URL_BASE)
         st.write('최근 5시간의 데이터가 성공적으로 DB에 저장되었습니다.')
-    else:
-        st.error('최근 5시간의 데이터를 가져오는 데 오류가 발생했습니다.')
+    except Exception as e:
+        st.error(f'최근 5시간의 데이터를 가져오는 데 오류가 발생했습니다: {e}')
 
 # DB 초기화 버튼
 if st.button('DB 초기화'):
