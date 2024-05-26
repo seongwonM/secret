@@ -286,7 +286,7 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         conn.commit()
 
 # Alpha Vantage API 설정
-ALPHA_VANTAGE_API_KEY = 'YOUR_ALPHA_VANTAGE_API_KEY'  # Alpha Vantage API 키 입력
+ALPHA_VANTAGE_API_KEY = '4K25W2F5857KVDRL'  # Alpha Vantage API 키 입력
 ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
 
 def fetch_recent_5_hours_data(stock_code):
