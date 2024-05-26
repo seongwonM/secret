@@ -5,5 +5,3 @@ transformers
 torch
 scikit-learn
 python-binance
-yfinance
-alpha_vantage
