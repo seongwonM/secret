@@ -535,6 +535,9 @@ if st.button('자동매매 시작'):
 
             time.sleep(sleep_time)
 
+            if st.button('종료'):
+                break
+
     except Exception as e:
         send_message(f"[오류 발생]{e}", DISCORD_WEBHOOK_URL)
         st.error(f"오류 발생: {e}")
