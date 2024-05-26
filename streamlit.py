@@ -5,10 +5,26 @@ import json
 import datetime
 import time
 import pandas as pd
+import torch
+import torch.nn as nn
+from sklearn.preprocessing import MinMaxScaler
+
+# model py파일 import
+from stock import Stock, Mymodel
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # 데이터베이스 연결
 conn = sqlite3.connect('stock_prices.db')
 cursor = conn.cursor()
+
+# 테이블에 'close'와 'volume' 열이 존재하는지 확인하고, 없으면 추가
+cursor.execute("PRAGMA table_info(price_info)")
+columns = [info[1] for info in cursor.fetchall()]
+if 'close' not in columns:
+    cursor.execute('ALTER TABLE price_info ADD COLUMN close INTEGER')
+if 'volume' not in columns:
+    cursor.execute('ALTER TABLE price_info ADD COLUMN volume INTEGER')
+conn.commit()
 
 # 테이블 생성 (필요할 경우)
 cursor.execute('''
@@ -18,10 +34,44 @@ CREATE TABLE IF NOT EXISTS price_info (
     high INTEGER,
     low INTEGER,
     open INTEGER,
+    close INTEGER,
+    volume INTEGER,
     PRIMARY KEY (time_key, stock_code)
 )
 ''')
 conn.commit()
+
+# 모델1 부분
+
+stock=Stock()
+
+def get_model_prediction(stock_code, current_hour_key):
+    # current_hour_key 이전 10개 데이터 가져오기
+    cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, stock.seq_len))
+    rows = cursor.fetchall()
+
+    if len(rows) < stock.seq_len:
+        return None  # 데이터가 충분하지 않으면 None 반환
+
+    # 데이터를 DataFrame으로 변환
+    df = pd.DataFrame(rows, columns=['time_key', 'stock_code', 'high', 'low', 'open', 'close', 'Volume'])
+
+    stock=Stock(df)
+    stock.preprocessing()
+    stock.add_change(stock.df.columns)
+    stock.df.loc[stock.df['Volume_chg']==np.inf,'Volume_chg']=0
+    # stock.scale_col(stock.df.columns[[3,0,1,2,4]]) # 종가
+    stock.scale_col(stock.df.columns[[8,5,6,7,9]]) # 종가(변화율)
+    train_loader=stock.data_loader(stock.seq_len, 'train')
+    valid_loader=stock.data_loader(stock.seq_len, 'valid')
+    test_loader=stock.data_loader(stock.seq_len, 't')
+    stock.create_model(1, 0.2)
+    stock.model.load_state_dict(torch.load('chg_close_diff.pth'))
+    loss=stock.train(train_loader, valid_loader, test_loader, 10, 0.1, 20, 'test')
+    predicted_class, act=stock.pred_value('t')
+
+    return predicted_class
+
 
 # 전역 변수 설정
 ACCESS_TOKEN = None
@@ -74,8 +124,8 @@ def hashkey(datas, APP_KEY, APP_SECRET, URL_BASE):
     hashkey = res.json()["HASH"]
     return hashkey
 
-def get_current_price(code, APP_KEY, APP_SECRET, URL_BASE):
-    """현재가 조회"""
+def get_current_price_and_volume(code, APP_KEY, APP_SECRET, URL_BASE):
+    """현재가와 누적 거래량 조회"""
     ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
     URL = f"{URL_BASE}/{PATH}"
@@ -91,18 +141,42 @@ def get_current_price(code, APP_KEY, APP_SECRET, URL_BASE):
         "fid_input_iscd": code,
     }
     res = requests.get(URL, headers=headers, params=params)
-    return int(res.json()['output']['stck_prpr'])
+    data = res.json()['output']
+    current_price = int(data['stck_prpr'])
+    acml_vol = int(data['acml_vol'])
+    return current_price, acml_vol
 
-def get_target_price(stock_code):
+def get_previous_row(stock_code, current_hour_key):
+    cursor.execute('''
+        SELECT high, low 
+        FROM price_info 
+        WHERE stock_code = ? AND time_key < ? 
+        ORDER BY time_key DESC 
+        LIMIT 1
+    ''', (stock_code, current_hour_key))
+    return cursor.fetchone()
+
+def get_target_price_change(stock_code):
     now = datetime.datetime.now()
     current_hour_key = now.strftime('%Y-%m-%d %H')
-    previous_hour = now - datetime.timedelta(hours=1)
-    previous_hour_key = previous_hour.strftime('%Y-%m-%d %H')
+
+    if now.hour == 9:
+        previous_day = now - datetime.timedelta(days=1)
+        previous_hour_key = previous_day.replace(hour=14).strftime('%Y-%m-%d %H')
+        cursor.execute('SELECT high, low FROM price_info WHERE time_key = ? AND stock_code = ?', (previous_hour_key, stock_code))
+        prev_data = cursor.fetchone()
+        if not prev_data:
+            prev_data = get_previous_row(stock_code, current_hour_key)  # 수정된 부분
+    else:
+        previous_hour = now - datetime.timedelta(hours=1)
+        previous_hour_key = previous_hour.strftime('%Y-%m-%d %H')
+        cursor.execute('SELECT high, low FROM price_info WHERE time_key = ? AND stock_code = ?', (previous_hour_key, stock_code))
+        prev_data = cursor.fetchone()
+        if not prev_data:
+            prev_data = get_previous_row(stock_code, current_hour_key)  # 수정된 부분
 
     cursor.execute('SELECT open FROM price_info WHERE time_key = ? AND stock_code = ?', (current_hour_key, stock_code))
     stck_oprc = cursor.fetchone()
-    cursor.execute('SELECT high, low FROM price_info WHERE time_key = ? AND stock_code = ?', (previous_hour_key, stock_code))
-    prev_data = cursor.fetchone()
 
     if stck_oprc and prev_data:
         stck_oprc = stck_oprc[0]
@@ -111,34 +185,87 @@ def get_target_price(stock_code):
         return target_price
     else:
         return None
+    
 
-class PriceInfo:
-    def __init__(self):
-        self.high = None
-        self.low = None
-        self.open = None
+def sell_target_price_change(stock_code):
+    now = datetime.datetime.now()
+    current_hour_key = now.strftime('%Y-%m-%d %H')
 
-price_info_dict = {}
+    if now.hour == 9:
+        previous_day = now - datetime.timedelta(days=1)
+        previous_hour_key = previous_day.replace(hour=14).strftime('%Y-%m-%d %H')
+        cursor.execute('SELECT high, low FROM price_info WHERE time_key = ? AND stock_code = ?', (previous_hour_key, stock_code))
+        prev_data = cursor.fetchone()
+        if not prev_data:
+            prev_data = get_previous_row(stock_code, current_hour_key)  # 수정된 부분
+    else:
+        previous_hour = now - datetime.timedelta(hours=1)
+        previous_hour_key = previous_hour.strftime('%Y-%m-%d %H')
+        cursor.execute('SELECT high, low FROM price_info WHERE time_key = ? AND stock_code = ?', (previous_hour_key, stock_code))
+        prev_data = cursor.fetchone()
+        if not prev_data:
+            prev_data = get_previous_row(stock_code, current_hour_key)  # 수정된 부분
 
-def update_price_info(current_price, current_time, stock_code):
+    cursor.execute('SELECT open FROM price_info WHERE time_key = ? AND stock_code = ?', (current_hour_key, stock_code))
+    stck_oprc = cursor.fetchone()
+
+    if stck_oprc and prev_data:
+        stck_oprc = stck_oprc[0]
+        stck_hgpr, stck_lwpr = prev_data
+        target_price = stck_oprc - (stck_hgpr - stck_lwpr) * 0.5
+        return target_price
+    else:
+        return None
+
+
+
+def get_target_price_ma(stock_code):
+    cursor.execute('SELECT time_key, open FROM price_info WHERE stock_code = ?', (stock_code,))
+    rows = cursor.fetchall()
+    df = pd.DataFrame(rows, columns=['time_key', 'open'])
+    df['time_key'] = pd.to_datetime(df['time_key'])
+    df.set_index('time_key', inplace=True)
+    df['SMA2'] = df['open'].rolling(window=2, min_periods=1).mean()
+    df['SMA4'] = df['open'].rolling(window=4, min_periods=1).mean()
+    return df
+
+def get_accumulated_volume(stock_code, current_hour_key):
+    current_date = current_hour_key.split(' ')[0]  # YYYY-MM-DD 부분만 추출
+    cursor.execute('''
+        SELECT SUM(volume) 
+        FROM price_info 
+        WHERE stock_code = ? AND time_key < ? AND time_key LIKE ?
+    ''', (stock_code, current_hour_key, f'{current_date}%'))
+    result = cursor.fetchone()
+    return result[0] if result[0] is not None else 0
+
+
+def update_price_info(current_price, current_volume, current_time, stock_code):
     time_key = current_time.strftime('%Y-%m-%d %H')
-
+    
     cursor.execute('SELECT * FROM price_info WHERE time_key = ? AND stock_code = ?', (time_key, stock_code))
     data = cursor.fetchone()
 
+    # 누적 거래량 계산
+    accumulated_volume_before = get_accumulated_volume(stock_code, time_key)
+    volume = current_volume - accumulated_volume_before
+
     if data is None:
         cursor.execute('''
-        INSERT INTO price_info (time_key, stock_code, high, low, open) VALUES (?, ?, ?, ?, ?)
-        ''', (time_key, stock_code, current_price, current_price, current_price))
+        INSERT INTO price_info (time_key, stock_code, high, low, open, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (time_key, stock_code, current_price, current_price, current_price, current_price, volume))
         conn.commit()
     else:
         cursor.execute('''
         UPDATE price_info
         SET high = MAX(high, ?),
-            low = MIN(low, ?)
+            low = MIN(low, ?),
+            close = ?,
+            volume = ?
         WHERE time_key = ? AND stock_code = ?
-        ''', (current_price, current_price, time_key, stock_code))
+        ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
+
 
 def get_stock_balance(APP_KEY, APP_SECRET, URL_BASE):
     """주식 잔고조회"""
@@ -290,7 +417,7 @@ stock_code = st.text_input('종목 코드', value='005930')
 if st.button('현재 주가 조회'):
     try:
         ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
-        current_price = get_current_price(stock_code, APP_KEY, APP_SECRET, URL_BASE)
+        current_price, acml_vol = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
         st.write(f'{stock_code}의 현재 주가는 {current_price}원입니다.')
     except Exception as e:
         st.error(f'주가 정보를 가져오는 데 오류가 발생했습니다: {e}')
@@ -311,28 +438,33 @@ if st.button('종목 데이터 조회'):
         rows = cursor.fetchall()
         if rows:
             st.write(f'{stock_code}의 데이터:')
-            st.write(pd.DataFrame(rows, columns=['time_key', 'stock_code', 'high', 'low', 'open']))
+            st.write(pd.DataFrame(rows, columns=['time_key', 'stock_code', 'high', 'low', 'open','close','volume']))
         else:
             st.write(f'{stock_code}에 대한 데이터가 없습니다.')
     except Exception as e:
         st.error(f'종목 데이터를 가져오는 데 오류가 발생했습니다: {e}')
 
-# 자동매매 시작 버튼
+
 if st.button('자동매매 시작'):
     try:
         ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
         total_cash = get_balance(APP_KEY, APP_SECRET, URL_BASE)
         bought = False
         bought_time = None
+        buy_price = 0
+        sell_price = 0
+        total_profit = 0
 
         st.write('===국내 주식 자동매매 프로그램을 시작합니다===')
         send_message('===국내 주식 자동매매 프로그램을 시작합니다===', DISCORD_WEBHOOK_URL)
+        
+        profit_display = st.sidebar.empty()
 
         while True:
             loop_start_time = datetime.datetime.now()
 
             t_now = datetime.datetime.now()
-            t_start = t_now.replace(hour=13, minute=0, second=0, microsecond=0)
+            t_start = t_now.replace(hour=9, minute=0, second=0, microsecond=0)
             t_sell = t_now.replace(hour=14, minute=50, second=0, microsecond=0)
             t_end = t_now.replace(hour=15, minute=0, second=0, microsecond=0)
             today = datetime.datetime.today().weekday()
@@ -342,34 +474,44 @@ if st.button('자동매매 시작'):
                 break
 
             if t_now >= t_end:
-                send_message("오후 3시가 지났으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
-                break
+                send_message("오후 3시가 지났습니다.", DISCORD_WEBHOOK_URL)
 
-            current_price = get_current_price(stock_code, APP_KEY, APP_SECRET, URL_BASE)
-            update_price_info(current_price, t_now, stock_code)
+            current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
+            update_price_info(current_price, current_volume, t_now, stock_code)
+
+            current_hour_key = t_now.strftime('%Y-%m-%d %H')  # current_hour_key 할당
 
             if t_start < t_now < t_sell and not bought:
-                target_price = get_target_price(stock_code)
+                target_price = get_target_price_change(stock_code)
+                model_prediction = get_model_prediction(stock_code, current_hour_key)
 
-                if target_price and target_price < current_price:
+                if target_price and target_price < current_price and current_price < model_prediction[0][0]:
                     buy_qty = int(total_cash // current_price)
                     if buy_qty > 0:
                         result = buy(stock_code, buy_qty, APP_KEY, APP_SECRET, URL_BASE)
                         if result:
                             bought = True
+                            buy_price = current_price
                             # 매도 시간을 현재 시간의 마지막 초로 설정
                             bought_time = t_now.replace(minute=59, second=59)
                             send_message(f"{stock_code} 매수 완료", DISCORD_WEBHOOK_URL)
                             st.write(f"{stock_code} 매수 완료")
 
+            sell_price = get_target_price_change(stock_code)
+
             # 특정 시간의 마지막 초에 매도
-            if bought and t_now >= bought_time:
+            if bought and (target_price <= sell_price or current_price > model_prediction[0][0]):
                 stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE)
                 qty = stock_dict.get(stock_code, 0)
+                if qty:
+                    qty = int(qty)
                 if qty > 0:
                     result = sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE)
                     if result:
                         bought = False
+                        sell_price = current_price
+                        profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
+                        total_profit += profit
                         send_message(f"{stock_code} 매도 완료", DISCORD_WEBHOOK_URL)
                         st.write(f"{stock_code} 매도 완료")
 
@@ -379,12 +521,18 @@ if st.button('자동매매 시작'):
                 if qty > 0:
                     sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE)
                     bought = False
+                    sell_price = current_price
+                    profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
+                    total_profit += profit
                     send_message(f"장 마감 강제 매도: {stock_code}", DISCORD_WEBHOOK_URL)
                     st.write(f"장 마감 강제 매도: {stock_code}")
 
+            # 수익률 표시
+            profit_display.write(f"오늘의 수익률: {total_profit:.2f}%")
+
             loop_end_time = datetime.datetime.now()
             elapsed_time = (loop_end_time - loop_start_time).total_seconds()
-            sleep_time = max(60 - elapsed_time, 0)
+            sleep_time = max(5 - elapsed_time, 0)
 
             time.sleep(sleep_time)
 
