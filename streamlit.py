@@ -290,10 +290,12 @@ def fetch_recent_5_hours_data(stock_code):
     try:
         ticker = str(stock_code)+'.KS'
         data = yf.download(ticker, period="6h", interval="1h")
+        time.sleep(1)
 
     except:
         ticker = str(stock_code)+'.KQ'
         data = yf.download(ticker, period="6h", interval="1h")
+        time.sleep(1)
         
     data=data.tail(5)
     for idx, row in data.iterrows():
