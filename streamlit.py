@@ -49,7 +49,7 @@ def get_model_prediction(stock_code, current_hour_key):
     cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, 5))
     rows = cursor.fetchall()
 
-    if len(rows) < stock.seq_len:
+    if len(rows) < 5:
         return None  # 데이터가 충분하지 않으면 None 반환
 
     # 데이터를 DataFrame으로 변환
