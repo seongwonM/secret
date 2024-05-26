@@ -84,7 +84,7 @@ TOKEN_VALIDITY_DURATION = 3600 * 6  # 토큰 유효 기간 (6시간)
 # 함수 정의
 def send_message(msg, DISCORD_WEBHOOK_URL):
     """디스코드 메세지 전송"""
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
     message = {"content": f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {str(msg)}"}
     requests.post(DISCORD_WEBHOOK_URL, data=message)
     print(message)
@@ -103,7 +103,7 @@ def get_access_token(APP_KEY, APP_SECRET, URL_BASE):
     res = requests.post(URL, headers=headers, data=json.dumps(body))
     if res.status_code == 200:
         ACCESS_TOKEN = res.json()["access_token"]
-        token_issue_time = datetime.datetime.now()
+        token_issue_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
         return ACCESS_TOKEN
     else:
         raise Exception("Failed to get access token")
@@ -111,7 +111,7 @@ def get_access_token(APP_KEY, APP_SECRET, URL_BASE):
 def ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE):
     """토큰의 유효성을 보장하고 필요시 갱신"""
     global ACCESS_TOKEN, token_issue_time
-    if ACCESS_TOKEN is None or (datetime.datetime.now() - token_issue_time).total_seconds() >= TOKEN_VALIDITY_DURATION:
+    if ACCESS_TOKEN is None or (datetime.datetime.now(pytz.timezone('Asia/Seoul')) - token_issue_time).total_seconds() >= TOKEN_VALIDITY_DURATION:
         ACCESS_TOKEN = get_access_token(APP_KEY, APP_SECRET, URL_BASE)
 
 def hashkey(datas, APP_KEY, APP_SECRET, URL_BASE):
@@ -178,7 +178,7 @@ def get_previous_row(stock_code, current_hour_key):
     return cursor.fetchone()
 
 def get_target_price_change(stock_code):
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
     current_hour_key = now.strftime('%Y-%m-%d %H')
 
     if now.hour == 9:
@@ -209,7 +209,7 @@ def get_target_price_change(stock_code):
     
 
 def sell_target_price_change(stock_code):
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
     current_hour_key = now.strftime('%Y-%m-%d %H')
 
     if now.hour == 9:
@@ -531,16 +531,16 @@ if st.button('자동매매 시작'):
 
         while True:
             if st.session_state.stop:
-                send_message(f"현재 시각: {datetime.datetime.now()} \n 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
+                send_message(f"현재 시각: {datetime.datetime.now(pytz.timezone('Asia/Seoul'))} \n 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
-            loop_start_time = datetime.datetime.now()
+            loop_start_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
 
-            t_now = datetime.datetime.now()
+            t_now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
             t_start = t_now.replace(hour=9, minute=0, second=0, microsecond=0)
             t_sell = t_now.replace(hour=15, minute=00, second=0, microsecond=0)
             t_end = t_now.replace(hour=15, minute=20, second=0, microsecond=0)
-            today = datetime.datetime.today().weekday()
+            today = datetime.datetime.today(pytz.timezone('Asia/Seoul')).weekday()
 
             if today in [5]:  # 토요일이나 일요일이면 자동 종료
                 send_message("토요일이므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
@@ -548,6 +548,8 @@ if st.button('자동매매 시작'):
 
             if t_now >= t_end:
                 send_message(f"현재 시각: {t_now} \n 오후 3시가 지났으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
+                break
+
             if t_start <= t_now <= t_sell:
                 current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
                 update_price_info(current_price, current_volume, t_now, stock_code)
@@ -602,7 +604,7 @@ if st.button('자동매매 시작'):
             # 수익률 표시
             profit_display.write(f"오늘의 수익률: {total_profit:.2f}%")
 
-            loop_end_time = datetime.datetime.now()
+            loop_end_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
             elapsed_time = (loop_end_time - loop_start_time).total_seconds()
             sleep_time = max(5 - elapsed_time, 0)
 
