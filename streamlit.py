@@ -522,7 +522,7 @@ if st.button('자동매매 시작'):
         sell_price = 0
         total_profit = 0
         st.session_state.stop = False
-        
+
         st.write('===국내 주식 자동매매 프로그램을 시작합니다===')
         send_message('===국내 주식 자동매매 프로그램을 시작합니다===', DISCORD_WEBHOOK_URL)
         
@@ -619,3 +619,4 @@ if st.button('자동매매 시작'):
         send_message("프로그램이 종료되었습니다.", DISCORD_WEBHOOK_URL)
         st.write("프로그램이 종료되었습니다.")
         st.session_state.stop = False  # Reset stop state
+        stop_button_placeholder.empty()  # 종료 버튼 제거
