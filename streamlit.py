@@ -527,12 +527,12 @@ if st.button('자동매매 시작'):
         
         profit_display = st.sidebar.empty()
         stop_button_placeholder = st.empty()
-        stop_button_placeholder.button('종료', key='stop_button', on_click=stop_button_callback)
+        stop_button_placeholder.button('종료', key='stop_button', on_click=stop_button_callback())
 
         while True:
             if st.session_state.stop:
                 st.session_state.stop = False
-                send_message(f"현재 시각: {t_now} \n 프로그램을 종료합니다.")
+                send_message(f"현재 시각: {datetime.datetime.now()} \n 프로그램을 종료합니다.")
                 break
 
             loop_start_time = datetime.datetime.now()
