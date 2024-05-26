@@ -592,6 +592,7 @@ if st.button('자동매매 시작'):
             time.sleep(sleep_time)
 
             if st.button('종료'):
+                profit_display.write(f"오늘의 수익률: {total_profit:.2f}%")
                 break
 
     except Exception as e:
