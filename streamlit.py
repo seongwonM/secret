@@ -485,7 +485,7 @@ if st.button('종목 데이터 조회'):
 # 최근 5시간 데이터 미리 가져오기 버튼
 if st.button('최근 5시간 데이터 미리 가져오기'):
     try:
-        fetch_recent_5_hours_data(stock_code, APP_KEY, APP_SECRET, URL_BASE)
+        fetch_recent_5_hours_data(stock_code)
         st.write('최근 5시간의 데이터가 성공적으로 DB에 저장되었습니다.')
     except Exception as e:
         st.error(f'최근 5시간의 데이터를 가져오는 데 오류가 발생했습니다: {e}')
