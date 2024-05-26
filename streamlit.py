@@ -521,14 +521,15 @@ if st.button('자동매매 시작'):
         buy_price = 0
         sell_price = 0
         total_profit = 0
-
+        st.session_state.stop = False
+        
         st.write('===국내 주식 자동매매 프로그램을 시작합니다===')
         send_message('===국내 주식 자동매매 프로그램을 시작합니다===', DISCORD_WEBHOOK_URL)
         
         profit_display = st.sidebar.empty()
         stop_button_placeholder = st.empty()
         stop_button_placeholder.button('종료', key='stop_button', on_click=stop_button_callback)
-
+        
         while True:
             if st.session_state.stop:
                 send_message(f"현재 시각: {datetime.datetime.now(pytz.timezone('Asia/Seoul'))} \n 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
