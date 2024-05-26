@@ -10,6 +10,7 @@ import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 import yfinance as yf
+from io import StringIO
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -285,7 +286,9 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
 
 def download_krx_data():
     url = "http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&searchType=13"
-    df = pd.read_html(url, header=0)[0]
+    response = requests.get(url)
+    response.encoding = 'EUC-KR'  # 인코딩을 EUC-KR로 설정
+    df = pd.read_html(StringIO(response.text), header=0)[0]
     df['종목코드'] = df['종목코드'].map('{:06d}'.format)
     df = df[['종목코드', '회사명', '업종', '주요제품', '상장일', '결산월', '대표전화', '홈페이지', '지역']]
     return df
