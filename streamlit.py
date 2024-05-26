@@ -289,12 +289,19 @@ def fetch_recent_5_hours_data(stock_code, APP_KEY, APP_SECRET, URL_BASE):
     # 영업일 기준 최근 5시간 데이터 계산
     for i in range(1, 6):
         hour = now - datetime.timedelta(hours=i)
-        if hour.weekday() >= 5:  # 토요일(5) 또는 일요일(6)인 경우
-            continue
-        if hour.hour < 9:  # 오전 9시 이전인 경우
+        
+        # 만약 현재가 월요일 오전 9시 이전이라면, 금요일 데이터를 가져오도록 조정
+        if hour.weekday() == 0 and hour.hour < 9:
+            hour = hour.replace(hour=15, minute=0, second=0) - datetime.timedelta(days=3)
+        elif hour.weekday() == 6:  # 일요일인 경우
+            hour = hour.replace(hour=15, minute=0, second=0) - datetime.timedelta(days=2)
+        elif hour.weekday() == 5:  # 토요일인 경우
             hour = hour.replace(hour=15, minute=0, second=0) - datetime.timedelta(days=1)
-        if hour.hour > 15:  # 오후 3시 이후인 경우
+        elif hour.hour < 9:  # 오전 9시 이전인 경우
+            hour = hour.replace(hour=15, minute=0, second=0) - datetime.timedelta(days=1)
+        elif hour.hour > 15:  # 오후 3시 이후인 경우
             hour = hour.replace(hour=15, minute=0, second=0)
+            
         recent_hours.append(hour)
 
     for hour in sorted(recent_hours):
