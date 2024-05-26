@@ -284,6 +284,7 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
+@st.cache
 def fetch_recent_5_hours_data(stock_code):
     data = None
     
@@ -297,14 +298,16 @@ def fetch_recent_5_hours_data(stock_code):
         try:
             stock = yf.Ticker(str(stock_code) + '.KQ')
             data = stock.history(period="6h", interval="1h")
-            time.sleep(5)
             if data.empty:
                 raise ValueError("No data fetched for KOSDAQ")
         except Exception as e:
             st.error(f"Error fetching data for stock code {stock_code}: {e}")
-            return
-    
-    for idx, row in data.iloc[1:,].iterrows():
+            return None
+
+    return data
+
+def save_data_to_db(data, stock_code):
+    for idx, row in data.iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
         open_price = row['Open']
         high_price = row['High']
@@ -498,13 +501,13 @@ if st.button('종목 데이터 조회'):
     except Exception as e:
         st.error(f'종목 데이터를 가져오는 데 오류가 발생했습니다: {e}')
 
-# 최근 5시간 데이터 미리 가져오기 버튼
 if st.button('최근 5시간 데이터 미리 가져오기'):
-    try:
-        fetch_recent_5_hours_data(stock_code)
+    data = fetch_recent_5_hours_data(stock_code)
+    if data is not None:
+        save_data_to_db(data, stock_code)
         st.write('최근 5시간의 데이터가 성공적으로 DB에 저장되었습니다.')
-    except Exception as e:
-        st.error(f'최근 5시간의 데이터를 가져오는 데 오류가 발생했습니다: {e}')
+    else:
+        st.error('최근 5시간의 데이터를 가져오는 데 오류가 발생했습니다.')
 
 # DB 초기화 버튼
 if st.button('DB 초기화'):
