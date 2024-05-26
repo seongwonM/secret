@@ -543,8 +543,8 @@ if st.button('자동매매 시작'):
                 break
 
             if t_now >= t_end:
-                send_message("오후 3시가 지났습니다.", DISCORD_WEBHOOK_URL)
-
+                send_message("오후 3시가 지났으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
+                break
             if t_start <= t_now <= t_sell:
                 current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
                 update_price_info(current_price, current_volume, t_now, stock_code)
