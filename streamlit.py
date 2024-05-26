@@ -614,9 +614,3 @@ if st.button('자동매매 시작'):
     finally:
         send_message("프로그램이 종료되었습니다.", DISCORD_WEBHOOK_URL)
         st.write("프로그램이 종료되었습니다.")
-
-
-# Display the stop button outside the main loop
-if 'stop_button_placeholder' not in st.session_state:
-    st.session_state.stop_button_placeholder = st.empty()
-st.session_state.stop_button_placeholder.button('종료', key='stop_button', on_click=stop_button_callback)
