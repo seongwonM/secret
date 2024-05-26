@@ -319,7 +319,7 @@ def fetch_recent_5_hours_data(stock_code, API_KEY, SECRET_KEY, BASE_URL):
 
     data = []
     for i in range(5):
-        time_point = (datetime.now() - timedelta(hours=i)).strftime('%Y%m%d%H%M%S')
+        time_point = (datetime.datetime.now() - timedelta(hours=i)).strftime('%Y%m%d%H%M%S')
         url = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-prices"
         response = requests.get(url, headers=headers, params={**params, 'fid_etc_cls_code': time_point})
         response_text = response.text
