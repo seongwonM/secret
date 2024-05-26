@@ -540,9 +540,9 @@ if st.button('자동매매 시작'):
             t_start = t_now.replace(hour=9, minute=0, second=0, microsecond=0)
             t_sell = t_now.replace(hour=15, minute=00, second=0, microsecond=0)
             t_end = t_now.replace(hour=15, minute=20, second=0, microsecond=0)
-            today = datetime.datetime.today(pytz.timezone('Asia/Seoul')).weekday()
+            today = datetime.datetime.today().weekday()
 
-            if today in [5]:  # 토요일이나 일요일이면 자동 종료
+            if today in [5]:  # 토요일이면 자동 종료
                 send_message("토요일이므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
