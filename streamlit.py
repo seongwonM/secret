@@ -12,7 +12,7 @@ import numpy as np
 from io import StringIO
 from datetime import timedelta
 import pytz
-from y_data import y_loader
+import yfinance as yf
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -287,8 +287,15 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         conn.commit()
 
 def fetch_recent_5_hours_data(stock_code):
-    y_loader(stock_code)
-    data=pd.read_csv(f'{stock_code}.csv').tail(5)
+    try:
+        ticker = str(stock_code)+'.KS'
+        data = yf.download(ticker=ticker, period="6h", interval="1h")
+
+    except:
+        ticker = str(stock_code)+'.KQ'
+        data = yf.download(ticker=ticker, period="6h", interval="1h")
+        
+    data=data.tail(5)
     for idx, row in data.iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
         open_price = row['Open']
