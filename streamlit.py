@@ -284,32 +284,14 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-def download_krx_data():
-    url = "http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&searchType=13"
-    response = requests.get(url)
-    response.encoding = 'EUC-KR'  # 인코딩을 EUC-KR로 설정
-    df = pd.read_html(StringIO(response.text), header=0)[0]
-    df['종목코드'] = df['종목코드'].map('{:06d}'.format)
-    df = df[['종목코드', '회사명', '업종', '주요제품', '상장일', '결산월', '대표전화', '홈페이지', '지역']]
-    return df
-
-def get_market_type(stock_code, krx_data):
-    if stock_code in krx_data['종목코드'].values:
-        return "코스피"
-    else:
-        return "코스닥"
-    
-
-
 def fetch_recent_5_hours_data(stock_code):
-    krx_data = download_krx_data()
-    market_type = get_market_type(stock_code, krx_data)
-    if market_type == "코스피":
-        stock = yf.Ticker(str(stock_code)+'.KS')
-    else:
-        stock = yf.Ticker(str(stock_code)+'.KQ')
+    stock = yf.Ticker(str(stock_code)+'.KS')
     data = stock.history(period="5h", interval="1h")
 
+    if len(data)==0:
+        stock = yf.Ticker(str(stock_code)+'.KQ')
+        data = stock.history(period="5h", interval="1h")
+    
     for idx, row in data.iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
         open_price = row['Open']
