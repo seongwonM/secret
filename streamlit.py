@@ -298,7 +298,7 @@ def get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL):
     response = requests.post(url, headers=headers, json=body)
     return response.json()['access_token']
 
-def fetch_recent_5_hours_data(stock_code):
+def fetch_recent_5_hours_data(stock_code, API_KEY, SECRET_KEY, BASE_URL):
     access_token = get_access_token()
     headers = {
         'Content-Type': 'application/json',
@@ -326,6 +326,8 @@ def fetch_recent_5_hours_data(stock_code):
                 st.error(f"Error fetching data for {stock_code} at {time_point}: {response_data}")
         except requests.exceptions.JSONDecodeError:
             st.error(f"Error decoding JSON for {stock_code} at {time_point}: {response.text}")
+        except Exception as e:
+            st.error(f"Unexpected error: {e}")
     return data
 
 def save_data_to_db(data, stock_code):
