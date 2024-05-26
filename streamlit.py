@@ -531,7 +531,6 @@ if st.button('자동매매 시작'):
 
         while True:
             if st.session_state.stop:
-                st.session_state.stop = False
                 send_message(f"현재 시각: {datetime.datetime.now()} \n 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
@@ -616,3 +615,4 @@ if st.button('자동매매 시작'):
     finally:
         send_message("프로그램이 종료되었습니다.", DISCORD_WEBHOOK_URL)
         st.write("프로그램이 종료되었습니다.")
+        st.session_state.stop = False  # Reset stop state
