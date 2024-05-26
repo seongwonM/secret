@@ -288,15 +288,13 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
 
 def fetch_recent_5_hours_data(stock_code):
     try:
-        ticker = str(stock_code)+'.KS'
-        data = yf.download(ticker, period="6h", interval="1h")
-        time.sleep(1)
+        stock = yf.Ticker(stock_code)
+        data = stock.history(period="1d", interval="1h")
+        if data.empty:
+            st.error(f"No data fetched for {stock_code}")
+    except Exception as e:
+        st.error(f"Error fetching data for {stock_code}: {e}")
 
-    except:
-        ticker = str(stock_code)+'.KQ'
-        data = yf.download(ticker, period="6h", interval="1h")
-        time.sleep(1)
-        
     data=data.tail(5)
     for idx, row in data.iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
