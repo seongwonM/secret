@@ -285,10 +285,11 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         conn.commit()
 
 def fetch_recent_5_hours_data(stock_code):
-    stock = yf.Ticker(str(stock_code)+'.KS')
-    data = stock.history(period="5h", interval="1h")
-
-    if len(data)==0:
+    try:
+        stock = yf.Ticker(str(stock_code)+'.KS')
+        data = stock.history(period="5h", interval="1h")
+        
+    except:
         stock = yf.Ticker(str(stock_code)+'.KQ')
         data = stock.history(period="5h", interval="1h")
     
