@@ -285,13 +285,26 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
-def fetch_recent_5_hours_data(stock_code):
-    ACCESS_TOKEN = get_access_token(APP_KEY, APP_SECRET, URL_BASE)
+def get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL):
+    headers = {
+        'content-type': 'application/json',
+    }
+    body = {
+        "grant_type": "client_credentials",
+        "appkey": API_KEY,
+        "appsecret": SECRET_KEY
+    }
+    url = f"{BASE_URL}/oauth2/tokenP"
+    response = requests.post(url, headers=headers, json=body)
+    return response.json()['access_token']
+
+def fetch_recent_5_hours_data(stock_code, API_KEY, SECRET_KEY, BASE_URL):
+    access_token = get_access_token_fetch(API_KEY, SECRET_KEY, BASE_URL)
     headers = {
         'Content-Type': 'application/json',
-        'authorization': f'Bearer {ACCESS_TOKEN}',
-        'appKey': APP_KEY,
-        'appSecret': APP_SECRET,
+        'authorization': f'Bearer {access_token}',
+        'appKey': API_KEY,
+        'appSecret': SECRET_KEY,
         'tr_id': 'FHKST01010100'
     }
     
@@ -303,7 +316,7 @@ def fetch_recent_5_hours_data(stock_code):
     data = []
     for i in range(5):
         time_point = (datetime.now() - timedelta(hours=i)).strftime('%Y%m%d%H%M%S')
-        url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-time-prices"
+        url = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-prices"
         response = requests.get(url, headers=headers, params={**params, 'fid_etc_cls_code': time_point})
         if response.status_code == 200:
             data.append(response.json())
@@ -508,7 +521,7 @@ if st.button('종목 데이터 조회'):
         st.error(f'종목 데이터를 가져오는 데 오류가 발생했습니다: {e}')
 
 if st.button('최근 5시간 데이터 미리 가져오기'):
-    data = fetch_recent_5_hours_data(stock_code)
+    data = fetch_recent_5_hours_data(stock_code, APP_KEY, APP_SECRET, URL_BASE)
     if data is not None:
         save_data_to_db(data, stock_code)
         st.write('최근 5시간의 데이터가 성공적으로 DB에 저장되었습니다.')
