@@ -531,6 +531,7 @@ if st.button('자동매매 시작'):
 
         while True:
             if st.session_state.stop:
+                send_message(f"현재 시각: {t_now} \n 프로그램을 종료합니다.")
                 break
 
             loop_start_time = datetime.datetime.now()
