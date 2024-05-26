@@ -319,19 +319,20 @@ def fetch_recent_5_hours_data(stock_code, API_KEY, SECRET_KEY, BASE_URL):
 
     data = []
     for i in range(5):
-        time_point = (datetime.datetime.now() - timedelta(hours=i)).strftime('%Y%m%d%H%M%S')
+        time_point = (datetime.now() - timedelta(hours=i)).strftime('%Y%m%d%H%M%S')
         url = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-prices"
         response = requests.get(url, headers=headers, params={**params, 'fid_etc_cls_code': time_point})
+        response_text = response.text
         try:
             response_data = response.json()
             if response.status_code == 200 and 'output' in response_data:
                 data.append(response_data)
             else:
-                st.error(f"Error fetching data for {stock_code} at {time_point}: {response_data}")
+                st.error(f"Error fetching data for {stock_code} at {time_point}: {response_text}")
         except requests.exceptions.JSONDecodeError:
-            st.error(f"Error decoding JSON for {stock_code} at {time_point}: {response.text}")
+            st.error(f"Error decoding JSON for {stock_code} at {time_point}: {response_text}")
         except Exception as e:
-            st.error(f"Unexpected error: {e}")
+            st.error(f"Unexpected error: {e}, response text: {response_text}")
     return data
 
 def save_data_to_db(data, stock_code):
