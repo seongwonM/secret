@@ -123,6 +123,24 @@ def hashkey(datas, APP_KEY, APP_SECRET, URL_BASE):
     hashkey = res.json()["HASH"]
     return hashkey
 
+def reset_database():
+    cursor.execute('DROP TABLE IF EXISTS price_info')
+    cursor.execute('''
+    CREATE TABLE price_info (
+        time_key TEXT,
+        stock_code TEXT,
+        high INTEGER,
+        low INTEGER,
+        open INTEGER,
+        close INTEGER,
+        volume INTEGER,
+        PRIMARY KEY (time_key, stock_code)
+    )
+    ''')
+    conn.commit()
+
+
+
 def get_current_price_and_volume(code, APP_KEY, APP_SECRET, URL_BASE):
     """현재가와 누적 거래량 조회"""
     ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
@@ -217,7 +235,6 @@ def sell_target_price_change(stock_code):
         return None
 
 
-
 def get_target_price_ma(stock_code):
     cursor.execute('SELECT time_key, open FROM price_info WHERE stock_code = ?', (stock_code,))
     rows = cursor.fetchall()
@@ -267,9 +284,20 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
 
 def fetch_recent_5_hours_data(stock_code, APP_KEY, APP_SECRET, URL_BASE):
     now = datetime.datetime.now()
-    recent_hours = [now - datetime.timedelta(hours=i) for i in range(1, 6)]
+    recent_hours = []
 
-    for hour in recent_hours:
+    # 영업일 기준 최근 5시간 데이터 계산
+    for i in range(1, 6):
+        hour = now - datetime.timedelta(hours=i)
+        if hour.weekday() >= 5:  # 토요일(5) 또는 일요일(6)인 경우
+            continue
+        if hour.hour < 9:  # 오전 9시 이전인 경우
+            hour = hour.replace(hour=15, minute=0, second=0) - datetime.timedelta(days=1)
+        if hour.hour > 15:  # 오후 3시 이후인 경우
+            hour = hour.replace(hour=15, minute=0, second=0)
+        recent_hours.append(hour)
+
+    for hour in sorted(recent_hours):
         current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
         update_price_info(current_price, current_volume, hour, stock_code)
         time.sleep(1)  # API 호출 간의 시간 간격을 두기 위해 잠시 대기
@@ -460,6 +488,14 @@ if st.button('최근 5시간 데이터 미리 가져오기'):
     except Exception as e:
         st.error(f'최근 5시간의 데이터를 가져오는 데 오류가 발생했습니다: {e}')
 
+# DB 초기화 버튼
+if st.button('DB 초기화'):
+    try:
+        reset_database()
+        st.write('데이터베이스가 초기화되었습니다.')
+    except Exception as e:
+        st.error(f'데이터베이스 초기화 중 오류가 발생했습니다: {e}')
+
 
 if st.button('자동매매 시작'):
     try:
@@ -492,8 +528,9 @@ if st.button('자동매매 시작'):
             if t_now >= t_end:
                 send_message("오후 3시가 지났습니다.", DISCORD_WEBHOOK_URL)
 
-            current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
-            update_price_info(current_price, current_volume, t_now, stock_code)
+            if t_start <= t_now <= t_sell:
+                current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
+                update_price_info(current_price, current_volume, t_now, stock_code)
 
             current_hour_key = t_now.strftime('%Y-%m-%d %H')  # current_hour_key 할당
 
