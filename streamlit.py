@@ -13,6 +13,8 @@ from io import StringIO
 from datetime import timedelta
 import pytz
 import yfinance as yf
+import appdirs as ad
+ad.user_cache_dir = lambda *args: "/tmp"
 
 # model py파일 import
 from stock import Stock, Mymodel
