@@ -554,6 +554,7 @@ if st.button('자동매매 시작'):
                 break
 
             if t_start <= t_now <= t_sell:
+                send_message("장 시간이므로 매매 기회가 오면 시도합니다.", DISCORD_WEBHOOK_URL)
                 current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
                 update_price_info(current_price, current_volume, t_now, stock_code)
 
@@ -565,6 +566,7 @@ if st.button('자동매매 시작'):
                 model_prediction = get_model_prediction(stock_code, current_hour_key)
 
                 if target_price and target_price < current_price and current_price < int(model_prediction[0][0]):
+                    send_message("매수 신호 발생", DISCORD_WEBHOOK_URL)
                     buy_qty = int(total_cash // int(current_price))
                     if buy_qty > 0:
                         result = buy(stock_code, buy_qty, APP_KEY, APP_SECRET, URL_BASE)
@@ -580,6 +582,7 @@ if st.button('자동매매 시작'):
             if bought and (target_price <= sell_price or current_price > int(model_prediction[0][0])):
                 stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE)
                 qty = stock_dict.get(stock_code, 0)
+                send_message("매도 신호 발생", DISCORD_WEBHOOK_URL)
                 if qty:
                     qty = int(qty)
                 if qty > 0:
