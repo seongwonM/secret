@@ -295,7 +295,7 @@ def fetch_recent_5_hours_data(stock_code):
             data = stock.history(period="6h", interval="1h")
             st.write(f'{stock_code} is not in KOSPI')
             if data.empty:
-                st.error(f"No data fetched for {stock_code}")
+                st.write(f"No data fetched for {stock_code}")
     except Exception as e:
         st.error(f"Error fetching data for {stock_code}: {e}")
 
