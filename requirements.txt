@@ -6,4 +6,3 @@ torch
 scikit-learn
 python-binance
 yfinance
-appdirs
