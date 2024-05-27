@@ -565,7 +565,7 @@ if st.button('자동매매 시작'):
                 model_prediction = get_model_prediction(stock_code, current_hour_key)
 
                 if target_price and target_price < current_price and current_price < int(model_prediction[0][0]):
-                    buy_qty = int(total_cash // current_price)
+                    buy_qty = int(total_cash // int(current_price))
                     if buy_qty > 0:
                         result = buy(stock_code, buy_qty, APP_KEY, APP_SECRET, URL_BASE)
                         if result:
