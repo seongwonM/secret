@@ -53,7 +53,6 @@ class Stock:
         self.df["Datetime"] = pd.to_datetime(self.df["Datetime"]).dt.strftime('%Y-%m-%d %H:%M:%S')
         self.df['Datetime'] = pd.to_datetime(self.df['Datetime'])
         self.df.set_index('Datetime', inplace=True)        
-        self.df.drop('Adj Close', axis=1, inplace=True)
 
         
         return self.df

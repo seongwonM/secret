@@ -57,14 +57,14 @@ def get_model_prediction(stock_code, current_hour_key):
         return None  # 데이터가 충분하지 않으면 None 반환
 
     # 데이터를 DataFrame으로 변환
-    df = pd.DataFrame(rows, columns=['time_key', 'stock_code', 'high', 'low', 'open', 'close', 'Volume'])
+    df = pd.DataFrame(rows, columns=['Datetime', 'stock_code', 'High', 'Low', 'Open', 'Close', 'Volume'])
 
     stock=Stock(df)
     stock.preprocessing()
     stock.add_change(stock.df.columns)
     stock.df.loc[stock.df['Volume_chg']==np.inf,'Volume_chg']=0
     # stock.scale_col(stock.df.columns[[3,0,1,2,4]]) # 종가
-    stock.scale_col(stock.df.columns[[8,5,6,7,9]]) # 종가(변화율)
+    stock.scale_col(stock.df.columns[['Close_chg', 'High_chg', 'Low_chg', 'Open_chg', 'Volume_chg']]) # 종가(변화율)
     train_loader=stock.data_loader(stock.seq_len, 'train')
     valid_loader=stock.data_loader(stock.seq_len, 'valid')
     test_loader=stock.data_loader(stock.seq_len, 't')
