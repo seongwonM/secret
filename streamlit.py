@@ -64,7 +64,7 @@ def get_model_prediction(stock_code, current_hour_key):
     stock.add_change(stock.df.columns)
     stock.df.loc[stock.df['Volume_chg']==np.inf,'Volume_chg']=0
     # stock.scale_col(stock.df.columns[[3,0,1,2,4]]) # 종가
-    stock.scale_col(stock.df.columns[['Close_chg', 'High_chg', 'Low_chg', 'Open_chg', 'Volume_chg']]) # 종가(변화율)
+    stock.scale_col(['Close_chg', 'High_chg', 'Low_chg', 'Open_chg', 'Volume_chg']) # 종가(변화율)
     train_loader=stock.data_loader(stock.seq_len, 'train')
     valid_loader=stock.data_loader(stock.seq_len, 'valid')
     test_loader=stock.data_loader(stock.seq_len, 't')
