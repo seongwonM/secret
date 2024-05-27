@@ -288,7 +288,7 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
 
 def fetch_recent_5_hours_data(stock_code):
     try:
-        now=datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+        now=datetime.datetime.now()
         stock = yf.Ticker(stock_code+'.KS')
         data = stock.history(start=now-datetime.timedelta(days=2), end=now, interval="1h")
         if data.empty:
