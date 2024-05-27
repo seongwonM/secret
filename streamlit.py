@@ -13,7 +13,6 @@ from io import StringIO
 from datetime import timedelta
 import pytz
 import yfinance as yf
-from pykrx import stock, bond
 
 # model py파일 import
 from stock import Stock, Mymodel
