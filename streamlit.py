@@ -290,10 +290,10 @@ def fetch_recent_5_hours_data(stock_code):
     try:
         now=datetime.datetime.now(pytz.timezone('Asia/Seoul'))
         stock = yf.Ticker(stock_code+'.KS')
-        data = stock.history(start=now-datetime.timedelta(days=1), end=now, interval="1h")
+        data = stock.history(start=now-datetime.timedelta(days=2), end=now, interval="1h")
         if data.empty:
             stock = yf.Ticker(stock_code+'.KQ')
-            data = stock.history(start=now-datetime.timedelta(days=1), end=now, interval="1h")
+            data = stock.history(start=now-datetime.timedelta(days=2), end=now, interval="1h")
             st.write(f'{stock_code} is not in KOSPI')
             if data.empty:
                 st.write(f"No data fetched for {stock_code}")
