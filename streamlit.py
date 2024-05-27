@@ -564,20 +564,20 @@ if st.button('자동매매 시작'):
                 target_price = get_target_price_change(stock_code)
                 model_prediction = get_model_prediction(stock_code, current_hour_key)
 
-                if target_price and target_price < current_price and current_price < model_prediction[0][0]:
+                if target_price and target_price < current_price and current_price < int(model_prediction[0][0]):
                     buy_qty = int(total_cash // current_price)
                     if buy_qty > 0:
                         result = buy(stock_code, buy_qty, APP_KEY, APP_SECRET, URL_BASE)
                         if result:
                             bought = True
-                            buy_price = current_price
+                            buy_price = int(current_price)
                             send_message(f"{stock_code} 매수 완료", DISCORD_WEBHOOK_URL)
                             st.write(f"{stock_code} 매수 완료")
 
             sell_price = get_target_price_change(stock_code)
 
             # 매도
-            if bought and (target_price <= sell_price or current_price > model_prediction[0][0]):
+            if bought and (target_price <= sell_price or current_price > int(model_prediction[0][0])):
                 stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE)
                 qty = stock_dict.get(stock_code, 0)
                 if qty:
@@ -586,7 +586,7 @@ if st.button('자동매매 시작'):
                     result = sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE)
                     if result:
                         bought = False
-                        sell_price = current_price
+                        sell_price = int(current_price)
                         profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
                         total_profit += profit
                         send_message(f"{stock_code} 매도 완료", DISCORD_WEBHOOK_URL)
