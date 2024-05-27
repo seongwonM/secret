@@ -13,8 +13,7 @@ from io import StringIO
 from datetime import timedelta
 import pytz
 import yfinance as yf
-import appdirs as ad
-ad.user_cache_dir = lambda *args: "/tmp"
+from pykrx import stock, bond
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -290,11 +289,12 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
 
 def fetch_recent_5_hours_data(stock_code):
     try:
+        now=datetime.datetime.now(pytz.timezone('Asia/Seoul'))
         stock = yf.Ticker(stock_code+'.KS')
-        data = stock.history(period="6h", interval="1h")
+        data = stock.history(start=now-datetime.timedelta(days=1), end=now, interval="1h")
         if data.empty:
             stock = yf.Ticker(stock_code+'.KQ')
-            data = stock.history(period="6h", interval="1h")
+            data = stock.history(start=now-datetime.timedelta(days=1), end=now, interval="1h")
             st.write(f'{stock_code} is not in KOSPI')
             if data.empty:
                 st.write(f"No data fetched for {stock_code}")
