@@ -80,6 +80,11 @@ class Stock:
             ys.append(y)
         return np.array(xs), np.array(ys)
     
+    def create_sequences_t(self, data, seq_length):
+        xs = []
+        xs=data[-seq_length:, :]
+        return np.array(xs)
+    
     def data_loader(self, seq_len, type='train'):
         self.seq_len=seq_len
         train_size = int(len(self.data) * 0.7)
@@ -95,7 +100,9 @@ class Stock:
         elif type=='test':
             X, y = self.create_sequences(self.data[train_size+val_size:], seq_len)
         else:
-            X, y = self.create_sequences(self.data, seq_len)
+            X = self.create_sequences_t(self.data, seq_len)
+            X = torch.tensor(X, dtype=torch.float32)
+            return X.unsqueeze(0)
                 
         X = torch.tensor(X, dtype=torch.float32)
         y = torch.tensor(y, dtype=torch.float32)
@@ -119,7 +126,6 @@ class Stock:
 
         # 학습 과정
         epochs = epoch
-        k=0.5
         if type=='train':
             patience_counter = 0
             criterion = nn.MSELoss()
@@ -204,17 +210,30 @@ class Stock:
             average_test_loss = sum(test_losses) / len(test_losses)
             print(f'Average Test Loss: {average_test_loss}')
             return average_test_loss
+        if type=='t':
+            self.predictions=[]
+            self.model.eval()  # 모델을 평가 모드로 설정
+
+            with torch.no_grad():  # 기울기 계산을 비활성화
+
+                outputs = self.model(test_loader)
+
+                self.predictions.extend(outputs.view(-1).detach().numpy())
+            return self.predictions
+    
 
     def pred_value(self, type):
         if (type=='chg')|(type=='t'):
             train_size = int(len(self.data) * 0.7)
             val_size = int(len(self.data) * 0.2)
             if type=='t':
-                yest=self.df.iloc[self.seq_len:,3].values.reshape(-1,1)
+                yest=self.df.iloc[-2,:].loc['Close']
+                self.predictions_inverse=self.scaler_target.inverse_transform([stock.predictions])*yest+yest
+                return self.predictions_inverse
             else:
                 yest=self.df.iloc[train_size+val_size+self.seq_len:,3].values.reshape(-1,1)
-            self.predictions_inverse = np.round(self.scaler_target.inverse_transform(np.array(self.predictions).reshape(-1,1))*yest+yest, -2)
-            self.actuals_inverse = np.round(self.scaler_target.inverse_transform(np.array(self.actuals).reshape(-1,1))*yest+yest, -2)
+                self.predictions_inverse = np.round(self.scaler_target.inverse_transform(np.array(self.predictions).reshape(-1,1))*yest+yest, -2)
+                self.actuals_inverse = np.round(self.scaler_target.inverse_transform(np.array(self.actuals).reshape(-1,1))*yest+yest, -2)
         else:
             self.predictions_inverse = np.round(self.scaler_target.inverse_transform(np.array(self.predictions).reshape(-1,1)), -2)
             self.actuals_inverse = np.round(self.scaler_target.inverse_transform(np.array(self.actuals).reshape(-1,1)), -2)

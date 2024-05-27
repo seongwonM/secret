@@ -63,17 +63,17 @@ def get_model_prediction(stock_code, current_hour_key):
     stock.preprocessing()
     stock.add_change(stock.df.columns)
     stock.df.loc[stock.df['Volume_chg']==np.inf,'Volume_chg']=0
-    # stock.scale_col(stock.df.columns[[3,0,1,2,4]]) # 종가
+    stock.seq_len=5
     stock.scale_col(['Close_chg', 'High_chg', 'Low_chg', 'Open_chg', 'Volume_chg']) # 종가(변화율)
     train_loader=stock.data_loader(stock.seq_len, 'train')
     valid_loader=stock.data_loader(stock.seq_len, 'valid')
     test_loader=stock.data_loader(stock.seq_len, 't')
     stock.create_model(1, 0.2)
     stock.model.load_state_dict(torch.load('chg_close_loss.pth'))
-    loss=stock.train(train_loader, valid_loader, test_loader, 10, 0.1, 20, 'test')
-    predicted_class, act=stock.pred_value('t')
+    loss=stock.train(train_loader, valid_loader, test_loader, 10, 0.1, 20, 't')
+    predicted=stock.pred_value('t')
 
-    return predicted_class
+    return predicted
 
 
 # 전역 변수 설정
@@ -554,7 +554,6 @@ if st.button('자동매매 시작'):
                 break
 
             if t_start <= t_now <= t_sell:
-                send_message("장 시간이므로 매매 기회가 오면 시도합니다.", DISCORD_WEBHOOK_URL)
                 current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
                 update_price_info(current_price, current_volume, t_now, stock_code)
 
