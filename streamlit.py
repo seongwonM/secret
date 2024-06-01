@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS price_info (
 ''')
 conn.commit()
 
-# 모델1 부분
+# 성원 모델 부분
 
 def get_model_prediction(stock_code, current_hour_key):
     # current_hour_key 이전 10개 데이터 가져오기
@@ -516,10 +516,10 @@ def stop_button_callback():
     st.session_state.stop = True
 
 if st.button('자동매매 시작'):
+    bought = False
     try:
         ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
         total_cash = get_balance(APP_KEY, APP_SECRET, URL_BASE)
-        bought = False
         buy_price = 0
         sell_price = 0
         total_profit = 0
