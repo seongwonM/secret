@@ -49,11 +49,11 @@ conn.commit()
 # 성원 모델 부분
 
 def get_model_prediction(stock_code, current_hour_key):
-    # current_hour_key 이전 10개 데이터 가져오기
-    cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, 5))
+    # current_hour_key 이전 6개 데이터 가져오기
+    cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, 6))
     rows = cursor.fetchall()
 
-    if len(rows) < 5:
+    if len(rows) < 6:
         return None  # 데이터가 충분하지 않으면 None 반환
 
     # 데이터를 DataFrame으로 변환
@@ -61,7 +61,7 @@ def get_model_prediction(stock_code, current_hour_key):
 
     stock=Stock(df)
     stock.preprocessing()
-    stock.add_change(stock.df.columns)
+    stock.add_change(['High', 'Low', 'Open', 'Close', 'Volume'])
     stock.df.loc[stock.df['Volume_chg']==np.inf,'Volume_chg']=0
     stock.seq_len=5
     stock.scale_col(['Close_chg', 'High_chg', 'Low_chg', 'Open_chg', 'Volume_chg']) # 종가(변화율)
@@ -300,7 +300,7 @@ def fetch_recent_5_hours_data(stock_code):
     except Exception as e:
         st.error(f"Error fetching data for {stock_code}: {e}")
 
-    data=data.tail(5)
+    data=data.tail(7)[:-1]
     for idx, row in data.iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
         open_price = row['Open']
@@ -549,7 +549,7 @@ if st.button('자동매매 시작'):
                 send_message("토요일이므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
-            if (t_now >= t_end + datetime.timedelta(hours=1)) or (t_now<=t_start-datetime.timedelta(hours=1)):
+            if (t_now >= t_end + datetime.timedelta(minutes=30)) or (t_now<=t_start-datetime.timedelta(hours=1)):
                 send_message(f"현재 시각: {t_now} \n 장이 마감되었으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
@@ -566,7 +566,7 @@ if st.button('자동매매 시작'):
 
                 if target_price and target_price < current_price and current_price < int(model_prediction[0][0]):
                     send_message("매수 신호 발생", DISCORD_WEBHOOK_URL)
-                    buy_qty = int(total_cash // int(current_price))
+                    buy_qty = int(total_cash*0.9 // int(current_price))
                     if buy_qty > 0:
                         result = buy(stock_code, buy_qty, APP_KEY, APP_SECRET, URL_BASE)
                         if result:
@@ -616,8 +616,8 @@ if st.button('자동매매 시작'):
             time.sleep(sleep_time)
 
     except Exception as e:
-        send_message(f"[오류 발생]{e}", DISCORD_WEBHOOK_URL)
-        st.error(f"오류 발생: {e}")
+            send_message(f"[오류 발생]{e}", DISCORD_WEBHOOK_URL)
+            st.error(f"오류 발생: {e}")
 
     finally:
         if bought:

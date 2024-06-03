@@ -228,7 +228,7 @@ class Stock:
             val_size = int(len(self.data) * 0.2)
             if type=='t':
                 yest=self.df.iloc[-2,:].loc['Close']
-                self.predictions_inverse=self.scaler_target.inverse_transform([stock.predictions])*yest+yest
+                self.predictions_inverse=self.scaler_target.inverse_transform([self.predictions])*yest+yest
                 return self.predictions_inverse
             else:
                 yest=self.df.iloc[train_size+val_size+self.seq_len:,3].values.reshape(-1,1)
