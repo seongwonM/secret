@@ -575,7 +575,7 @@ if st.button('자동매매 시작'):
                             send_message(f"{stock_code} 매수 완료", DISCORD_WEBHOOK_URL)
                             st.write(f"{stock_code} 매수 완료")
 
-            sell_price = get_target_price_change(stock_code)
+            sell_price = sell_target_price_change(stock_code)
 
             # 매도
             if bought and (target_price <= sell_price or current_price > int(model_prediction[0][0])):
