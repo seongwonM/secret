@@ -6,4 +6,4 @@ torch
 scikit-learn
 python-binance
 yfinance
-plotly-geo
+plotly
