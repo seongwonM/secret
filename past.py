@@ -19,15 +19,7 @@ cursor = conn.cursor()
 st.set_page_config(
     page_title="자동 주식 매매 프로그램",
     layout="centered",
-    initial_sidebar_state="auto",
-    menu_items={
-        'Get help': 'https://github.com/lucaseo/streamlit_app_stockprice_downloader',
-        'Report a bug': 'https://github.com/lucaseo/streamlit_app_stockprice_downloader/issues',
-        'About': '''
-        ## Stock price downloader
-        Download stock price data in US, South Korean stock market
-        '''
-    }
+    initial_sidebar_state="auto"
 )
 
 st.title('📈 자동 주식 매매 프로그램')
