@@ -4,7 +4,10 @@ import pandas as pd
 import yfinance as yf
 import pytz
 import datetime
+import numpy as np
+import torch
 import requests
+from stock import Stock, Mymodel
 from trading import ensure_token_valid, ACCESS_TOKEN
 
 def reset_database(conn, cursor):
@@ -32,7 +35,7 @@ def fetch_recent_data(stock_code, conn, cursor):
         data = stock.history(start=now - datetime.timedelta(days=4), end=now, interval="1h")
         if data.empty:
             return None
-    data = data.tail(7)[:-1]
+    data = data.tail(7)
     for idx, row in data.iterrows():
         time_key = idx.strftime('%Y-%m-%d %H')
         open_price = row['Open']
@@ -47,9 +50,9 @@ def fetch_recent_data(stock_code, conn, cursor):
     conn.commit()
     return data
 
-def get_current_price_and_volume(code, APP_KEY, APP_SECRET, URL_BASE, conn, cursor):
+def get_current_price_and_volume(code, APP_KEY, APP_SECRET, URL_BASE):
     """현재가와 누적 거래량 조회"""
-    ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
+    ACCESS_TOKEN=ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
     URL = f"{URL_BASE}/{PATH}"
     headers = {
@@ -63,7 +66,7 @@ def get_current_price_and_volume(code, APP_KEY, APP_SECRET, URL_BASE, conn, curs
         "fid_cond_mrkt_div_code": "J",
         "fid_input_iscd": code,
     }
-    res = requests.get(URL, headers=headers, params=params)
+    res = requests.request("GET", URL, headers=headers, params=params)
     data = res.json()['output']
     current_price = int(data['stck_prpr'])
     acml_vol = int(data['acml_vol'])
@@ -115,6 +118,8 @@ def get_previous_row(stock_code, current_hour_key, conn, cursor):
     ''', (stock_code, current_hour_key))
     return cursor.fetchone()
 
+k=0
+
 def get_target_price_change(stock_code, conn, cursor):
     now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
     current_hour_key = now.strftime('%Y-%m-%d %H')
@@ -140,7 +145,7 @@ def get_target_price_change(stock_code, conn, cursor):
     if stck_oprc and prev_data:
         stck_oprc = stck_oprc[0]
         stck_hgpr, stck_lwpr = prev_data
-        target_price = stck_oprc + (stck_hgpr - stck_lwpr) * 0.5
+        target_price = stck_oprc + (stck_hgpr - stck_lwpr) * k
         return target_price
     else:
         return None
@@ -170,7 +175,7 @@ def sell_target_price_change(stock_code, conn, cursor):
     if stck_oprc and prev_data:
         stck_oprc = stck_oprc[0]
         stck_hgpr, stck_lwpr = prev_data
-        target_price = stck_oprc - (stck_hgpr - stck_lwpr) * 0.5
+        target_price = stck_oprc - (stck_hgpr - stck_lwpr) * k
         return target_price
     else:
         return None
@@ -184,6 +189,8 @@ def get_target_price_ma(stock_code, conn, cursor):
     df['SMA2'] = df['open'].rolling(window=2, min_periods=1).mean()
     df['SMA4'] = df['open'].rolling(window=4, min_periods=1).mean()
     return df
+
+
 
 def get_model_prediction(stock_code, current_hour_key, conn, cursor):
     cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, 6))

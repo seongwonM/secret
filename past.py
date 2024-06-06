@@ -1,4 +1,4 @@
-# app.py
+# past.py
 import streamlit as st
 import datetime
 import pytz
@@ -6,7 +6,10 @@ import pandas as pd
 import time
 import sqlite3
 import plotly.graph_objects as go
+import numpy as np
 import yfinance as yf
+import torch
+from stock2 import Stock
 from database import ACCESS_TOKEN, reset_database, fetch_recent_data, get_current_price_and_volume, update_price_info, get_target_price_change, sell_target_price_change, get_model_prediction
 from trading import get_balance, get_stock_balance, buy, sell, send_message, ensure_token_valid
 
@@ -179,11 +182,8 @@ with col2:
 #         st.error(f'데이터베이스 초기화 중 오류가 발생했습니다: {e}')
 
 
-
 st.write("---")
 
-if 'stop' not in st.session_state:
-    st.session_state.stop = False
 def stop_button_callback():
     st.session_state.stop = True
 
@@ -197,136 +197,162 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-cash_ratio = st.number_input('예수금 비율 (%)', min_value=0, max_value=100, value=100, help='투자할 금액의 비율을 설정해주세요.')
+total_cash=st.text_input('보유 금액', value='', placeholder="보유 금액을 입력하세요.")
 
+cash_ratio = st.number_input('예수금 비율 (%)', min_value=0, max_value=100, value=100, help='투자할 금액의 비율을 설정해주세요.')
 
 # 자동 매매 시작 버튼
 if st.button('🚀 자동매매 시작'):
-    bought = False
-    try:
-        ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
-        total_cash = get_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-        allocated_cash = total_cash * (cash_ratio / 100)
-        buy_price = 0
-        sell_price = 0
-        total_profit = 0
-        st.session_state.stop = False
+    # 주식 데이터 가져오기 및 차트 표시
 
-        st.write('===국내 주식 자동매매 프로그램을 시작합니다===')
-        send_message('===국내 주식 자동매매 프로그램을 시작합니다===', DISCORD_WEBHOOK_URL)
+    st.write('===국내 주식 자동매매 프로그램을 시작합니다===')
+    send_message('===국내 주식 자동매매 프로그램을 시작합니다===', DISCORD_WEBHOOK_URL)
+    
+    profit_display = st.sidebar.empty()
+    stop_button_placeholder = st.empty()
+    stop_button_placeholder.button('⏹️ 종료', key='stop_button', on_click=stop_button_callback)
+
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+    tick = yf.Ticker(stock_code+'.KS')
+    df_get = tick.history(start=now - datetime.timedelta(days=7), end=now, interval='1m')
+    df_pred = tick.history(start=now - datetime.timedelta(days=10), end=now, interval='1h')
+    if df_get.empty:
+        tick = yf.Ticker(stock_code+'.KQ')
+        df_get = tick.history(start=now - datetime.timedelta(days=7), end=now, interval='1m')
+        df_pred = tick.history(start=now - datetime.timedelta(days=10), end=now, interval='1h')
+    stock=Stock(df_pred)
+    df_pred=stock.preprocessing()
+    stock.add_change(['High', 'Low', 'Open', 'Close', 'Volume'])
+    stock.df.loc[stock.df['Volume_chg']==np.inf,'Volume_chg']=0
+    stock.scale_col(['Close_chg', 'High_chg', 'Low_chg', 'Open_chg', 'Volume_chg']) # 종가(변화율)
+    train_loader=stock.data_loader(5, 't')
+    valid_loader=stock.data_loader(5, 't')
+    test_loader=stock.data_loader(5, 't')
+    stock.create_model()
+    stock.model.load_state_dict(torch.load('chg_close_loss.pth'))
+    stock.train(train_loader, valid_loader, test_loader, 7, 0.001, 80, 'test')
+    pred=stock.pred_value('t')
+    # stock.diff()
+    # stock.show('chg')
+
+    # 데이터셋 예측값 합치기
+    stock.df=df_get.copy()
+    df_get=stock.preprocessing()
+    df_pred['pred']=0
+    df_pred.iloc[len(df_pred)-len(pred):,-1]=pred
+    df_get['key']=pd.to_datetime(df_get.index).strftime('%d-%H')
+    df_pred['key']=pd.to_datetime(df_pred.index).strftime('%d-%H')
+    df_get.loc[:,'pred']=pd.merge(df_get[['key']], df_pred[['key', 'pred']], how='left', on='Datetime')['pred']
+    df_get.fillna(method='ffill', inplace=True)
+
+    # short=60
+    # long=2
+
+    # # 이평선
+    # df_get['4H_MA'] = df_get['Close'].rolling(window=short).mean()
+    # df_get['8H_MA'] = df_get['Close'].rolling(window=short*long).mean()
+    # # 이전 행의 4H_MA와 8H_MA 비교를 위해 shift() 사용
+    # df_get['Previous_4H_MA'] = df_get['4H_MA'].shift(1)
+    # df_get['Previous_8H_MA'] = df_get['8H_MA'].shift(1)
+
+    # 매수 조건: 이전 4H_MA <= 이전 8H_MA 이고 현재 4H_MA > 현재 8H_MA
+    # df_get['Buy_Signal'] = (df_get['Previous_4H_MA'] <= df_get['Previous_8H_MA']) & (df_get['4H_MA'] > df_get['8H_MA'])
+
+    # 매도 조건: 각 시간대의 마지막 분(59분)에 매도
+    # df_get['Sell_Signal'] = pd.to_datetime(df_get.index).minute == 59
+    # df_get['Sell_Signal'] = (df_get['Previous_4H_MA'] >= df_get['Previous_8H_MA']) & (df_get['4H_MA'] < df_get['8H_MA'])
+
+    # results=[]
+    # moneys=[]
+    # money=[]
+    # first=[]
+    # key=False
+    # for i, row in df_get.iterrows():
+    #     if row['Buy_Signal'] and row['Open']<=row['pred']:
+    #         money.append(row['Open'])
+    #         key=True
+    #     if (row['Sell_Signal'] or row['Open']>row['pred']) and key:
+    #         results.append((row['Close']-money[0])/money[0]*100)
+    #         moneys.append(row['Close']-money[0])
+    #         first.append(money[0])
+    #         money=[]
+    #         key=False
+    # try:
+    #     print('-'*100)
+    #     print(f'이동평균선 / {name}')
+    #     print(f'모델 수익률: {round(sum(moneys)/first[0]*100, 3)}%')
+    #     print(f'모델 수익: {int(sum(moneys))}')
+    #     print(f'수수료 포함 수익률: {round(sum(moneys)/first[0]*100-len(moneys)*0.2,3)}%')
+    #     print(f'buy & hold 수익률: {round((df_get.iloc[-1,3]-df_get.iloc[0,0])/df_get.iloc[0,0]*100, 3)}%')
+    #     print(f'buy & hold 수익: {int(df_get.iloc[-1,3]-df_get.iloc[0,0])}')
+    #     print(f'매매횟수: {len(moneys)}')
+    # except:
+    #     print('매매하지 않음')
+
+
+    k=0.5
+    # 변동성 돌파 전략
+    df_pred['Point']=(df_pred['High'].shift(1)-df_pred['Low'].shift(1))*k+df_pred['Open']
+    df_pred['Point2']=-(df_pred['High'].shift(1)-df_pred['Low'].shift(1))*k+df_pred['Open']
+    df_get['Point']=pd.merge(df_get[['key']], df_pred[['key', 'Point']], how='left', on='Datetime')['Point']
+    df_get['Point2']=pd.merge(df_get[['key']], df_pred[['key', 'Point2']], how='left', on='Datetime')['Point2']
+    df_get['Point'].fillna(method='ffill', inplace=True)
+    df_get['Point2'].fillna(method='ffill', inplace=True)
+
+    df_get['Buy_Signal'] = (df_get['Point'] <= df_get['Open'])
+    df_get['Sell_Signal'] = (df_get['Point2'] > df_get['Open'])
+
+    moneys=0
+    money=0
+    first=[]
+    key=False
+    profit=0
+    total_profit=0
+    total_cash= int(int(total_cash) * (cash_ratio / 100))
+    first_cash=total_cash
+    j=0
+    now=datetime.datetime.now()
+    for i, row in df_get.iterrows():
+        loop_start_time=datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+        if row['Buy_Signal'] and row['Open']<=row['pred'] and key == False:
+            send_message("매수 신호 발생", DISCORD_WEBHOOK_URL)
+            money=row['Open']
+            buy_qty = int(int(total_cash)*0.9 // int(money))
+            key=True
+            first.append(money)
+            send_message(f"{i.replace(tzinfo=None)}: {stock_code} 종목 {money}에 {buy_qty}주 매수 완료", DISCORD_WEBHOOK_URL)
+            st.write(f"{i.replace(tzinfo=None)}: {stock_code} 종목 {money}에 {buy_qty}주 매수 완료")
+        if key and (row['Sell_Signal'] or row['Open']>row['pred']):
+            send_message("매도 신호 발생", DISCORD_WEBHOOK_URL)
+            moneys+=row['Close']-money
+            key=False
+            total_cash+=int((row['Close']-money)*buy_qty)
+            total_cash=int(total_cash*0.998)
+            total_profit=(total_cash-first_cash)/first_cash*100
+            send_message(f"{i.replace(tzinfo=None)}: {stock_code} 종목 {row['Close']}에 {buy_qty}주 매도 완료", DISCORD_WEBHOOK_URL)
+            st.write(f"{i.replace(tzinfo=None)}: {stock_code} 종목 {row['Close']}에 {buy_qty}주 매도 완료, 잔액: {total_cash}")
+            profit_display.write(f"매도 후 수익률: {total_profit:.2f}%")
+        j+=1
         
-        profit_display = st.sidebar.empty()
-        stop_button_placeholder = st.empty()
-        stop_button_placeholder.button('⏹️ 종료', key='stop_button', on_click=stop_button_callback)
-        st.sidebar.write("---")
+        loop_end_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+        elapsed_time = (loop_end_time - loop_start_time).total_seconds()
+        p=30
+        sleep_time = max(1/p - elapsed_time, 0)
+        time.sleep(sleep_time)
+
+    st.write(f"배속: 약 {p}배")
+    st.write(f"총 소요 시간: {datetime.datetime.now()-now}")
+    st.write(f"기존 소요됐어야 하는 시간: {j//60}시간 {j%60//60}분")
+
+
+
+    if key:
+        first.pop()
         
-        while True:
-            if st.session_state.stop:
-                send_message(f"현재 시각: {datetime.datetime.now(pytz.timezone('Asia/Seoul'))} \n 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
-                break
+    if len(first)>0:
+        send_message(f"총 보유금: {total_cash}, 총 수익: {total_cash-first_cash}, 총 수익률: {total_profit:.2f}%, 매매횟수: {len(first)}", DISCORD_WEBHOOK_URL)
+        st.write(f"총 보유금: {total_cash}, 총 수익: {total_cash-first_cash}, 총 수익률: {total_profit:.2f}%, 매매횟수: {len(first)}")
 
-            loop_start_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
-
-            t_now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
-            t_start = t_now.replace(hour=9, minute=0, second=0, microsecond=0)
-            t_sell = t_now.replace(hour=15, minute=00, second=0, microsecond=0)
-            t_end = t_now.replace(hour=15, minute=20, second=0, microsecond=0)
-            today = t_now.weekday()
-
-            if today in [5]:  # 토요일이면 자동 종료
-                send_message("토요일이므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
-                break
-
-            if (t_now >= t_end + datetime.timedelta(minutes=30)) or (t_now<=t_start-datetime.timedelta(hours=1)):
-                send_message(f"현재 시각: {t_now} \n 장이 마감되었으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
-                break
-
-            if t_start <= t_now <= t_sell:
-                current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
-                update_price_info(current_price, current_volume, t_now, stock_code, conn, cursor)
-
-            current_hour_key = t_now.strftime('%Y-%m-%d %H')  # current_hour_key 할당
-
-            # 매수
-            if t_start < t_now < t_sell and not bought:
-                target_price = get_target_price_change(stock_code, conn, cursor)
-                model_prediction = get_model_prediction(stock_code, current_hour_key, conn, cursor)
-
-                if target_price and target_price < current_price and current_price < int(model_prediction[0][0]):
-                    send_message("매수 신호 발생", DISCORD_WEBHOOK_URL)
-                    st.write(f"모델 예측 가격: {model_prediction[0][0]}")
-                    buy_qty = int(allocated_cash // int(current_price))
-                    if buy_qty > 0:
-                        result = buy(stock_code, buy_qty, APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-                        if result:
-                            bought = True
-                            buy_price = int(current_price)
-                            send_message(f"{stock_code} 종목 {buy_price}에 {buy_qty}만큼 매수 완료", DISCORD_WEBHOOK_URL)
-                            st.write(f"{stock_code} 종목 {buy_price}에 {buy_qty}만큼 매수 완료")
-
-            sell_price = sell_target_price_change(stock_code, conn, cursor)
-
-            # 매도
-            if bought and (target_price <= sell_price or current_price > int(model_prediction[0][0])):
-                stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-                qty = stock_dict.get(stock_code, 0)
-                send_message("매도 신호 발생", DISCORD_WEBHOOK_URL)
-                if qty:
-                    qty = int(qty)
-                if qty > 0:
-                    result = sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-                    if result:
-                        bought = False
-                        sell_price = int(current_price)
-                        profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
-                        total_profit += profit
-                        send_message(f"{stock_code} 종목 {sell_price}에 {qty}만큼 매도 완료", DISCORD_WEBHOOK_URL)
-                        st.write(f"{stock_code} 종목 {sell_price}에 {qty}만큼 매도 완료")
-                        profit_display.write(f"매도 후 수익률: {total_profit:.2f}%")
-
-            # if t_now >= t_sell and bought:
-            #     stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-            #     qty = stock_dict.get(stock_code, 0)
-            #     if qty > 0:
-            #         sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-            #         bought = False
-            #         sell_price = current_price
-            #         profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
-            #         total_profit += profit
-            #         send_message(f"장 마감 강제 매도: {stock_code}", DISCORD_WEBHOOK_URL)
-            #         st.write(f"장 마감 강제 매도: {stock_code}")
-            #         profit_display.write(f"매도 후 수익률: {total_profit:.2f}%")
-
-            # 수익률 표시
-            profit_display.write(f"오늘의 수익률: {total_profit:.2f}%")
-
-            loop_end_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
-            elapsed_time = (loop_end_time - loop_start_time).total_seconds()
-            sleep_time = max(5 - elapsed_time, 0)
-
-            time.sleep(sleep_time)
-
-    except Exception as e:
-            send_message(f"[오류 발생]{e}", DISCORD_WEBHOOK_URL)
-            st.error(f"오류 발생: {e}")
-
-    finally:
-        if bought:
-                stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-                qty = stock_dict.get(stock_code, 0)
-                if qty > 0:
-                    sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL)
-                    bought = False
-                    sell_price = current_price
-                    profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
-                    total_profit += profit
-                    send_message(f"강제 매도: {stock_code}", DISCORD_WEBHOOK_URL)
-                    st.write(f"강제 매도: {stock_code}")
-        send_message("프로그램이 종료되었습니다.", DISCORD_WEBHOOK_URL)
-        send_message(f"오늘의 수익률: {total_profit:.2f}%", DISCORD_WEBHOOK_URL)
-        st.write("프로그램이 종료되었습니다.")
-        st.write(f"오늘의 수익률: {total_profit:.2f}%")
-        st.session_state.stop = False  # Reset stop state
-        stop_button_placeholder.empty()  # 종료 버튼 제거
-
-
+    else:
+        send_message(f"매매하지 않음", DISCORD_WEBHOOK_URL)
+        st.write(f"매매하지 않음")
