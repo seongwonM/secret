@@ -54,10 +54,11 @@ def ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE):
     global ACCESS_TOKEN, token_issue_time
     if ACCESS_TOKEN is None or (datetime.datetime.now(pytz.timezone('Asia/Seoul')) - token_issue_time).total_seconds() >= TOKEN_VALIDITY_DURATION:
         ACCESS_TOKEN = get_access_token(APP_KEY, APP_SECRET, URL_BASE)
+    return ACCESS_TOKEN
 
 def get_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL):
     """현금 잔고조회"""
-    ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
+    ACCESS_TOKEN=ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
     PATH = "uapi/domestic-stock/v1/trading/inquire-psbl-order"
     URL = f"{URL_BASE}/{PATH}"
     headers = {
@@ -84,7 +85,7 @@ def get_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHO
 
 def get_stock_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL):
     """주식 잔고조회"""
-    ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
+    ACCESS_TOKEN=ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
     headers = {
@@ -129,7 +130,7 @@ def get_stock_balance(APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD
 
 def buy(code, qty, APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL):
     """주식 시장가 매수"""
-    ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
+    ACCESS_TOKEN=ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
     data = {
@@ -159,7 +160,7 @@ def buy(code, qty, APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WE
 
 def sell(code, qty, APP_KEY, APP_SECRET, URL_BASE, CANO, ACNT_PRDT_CD, DISCORD_WEBHOOK_URL):
     """주식 시장가 매도"""
-    ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
+    ACCESS_TOKEN=ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
     data = {

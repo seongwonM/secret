@@ -8,7 +8,11 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
-from binance.client import Client
+import numpy as np
+from io import StringIO
+from datetime import timedelta
+import pytz
+import yfinance as yf
 
 # model py파일 import
 from stock import Stock, Mymodel
@@ -42,47 +46,45 @@ CREATE TABLE IF NOT EXISTS price_info (
 ''')
 conn.commit()
 
-# 모델 부분
-
-stock=Stock()
+# 성원 모델 부분
 
 def get_model_prediction(stock_code, current_hour_key):
-    # current_hour_key 이전 10개 데이터 가져오기
-    cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, stock.seq_len))
+    # current_hour_key 이전 6개 데이터 가져오기
+    cursor.execute('SELECT * FROM price_info WHERE stock_code = ? AND time_key < ? ORDER BY time_key DESC LIMIT ?', (stock_code, current_hour_key, 6))
     rows = cursor.fetchall()
 
-    if len(rows) < stock.seq_len:
+    if len(rows) < 6:
         return None  # 데이터가 충분하지 않으면 None 반환
 
     # 데이터를 DataFrame으로 변환
-    df = pd.DataFrame(rows, columns=['time_key', 'stock_code', 'high', 'low', 'open', 'close', 'Volume'])
+    df = pd.DataFrame(rows, columns=['Datetime', 'stock_code', 'High', 'Low', 'Open', 'Close', 'Volume'])
 
     stock=Stock(df)
     stock.preprocessing()
-    stock.add_change(stock.df.columns)
+    stock.add_change(['High', 'Low', 'Open', 'Close', 'Volume'])
     stock.df.loc[stock.df['Volume_chg']==np.inf,'Volume_chg']=0
-    # stock.scale_col(stock.df.columns[[3,0,1,2,4]]) # 종가
-    stock.scale_col(stock.df.columns[[8,5,6,7,9]]) # 종가(변화율)
+    stock.seq_len=5
+    stock.scale_col(['Close_chg', 'High_chg', 'Low_chg', 'Open_chg', 'Volume_chg']) # 종가(변화율)
     train_loader=stock.data_loader(stock.seq_len, 'train')
     valid_loader=stock.data_loader(stock.seq_len, 'valid')
     test_loader=stock.data_loader(stock.seq_len, 't')
     stock.create_model(1, 0.2)
-    stock.model.load_state_dict(torch.load('chg_close_diff.pth'))
-    loss=stock.train(train_loader, valid_loader, test_loader, 10, 0.1, 20, 'test')
-    predicted_class, act=stock.pred_value('t')
+    stock.model.load_state_dict(torch.load('chg_close_loss.pth'))
+    loss=stock.train(train_loader, valid_loader, test_loader, 10, 0.1, 20, 't')
+    predicted=stock.pred_value('t')
 
-    return predicted_class
+    return predicted
 
 
 # 전역 변수 설정
 ACCESS_TOKEN = None
 token_issue_time = None
-TOKEN_VALIDITY_DURATION = 3600 * 24  # 토큰 유효 기간 (24시간)
+TOKEN_VALIDITY_DURATION = 3600 * 6  # 토큰 유효 기간 (6시간)
 
 # 함수 정의
 def send_message(msg, DISCORD_WEBHOOK_URL):
     """디스코드 메세지 전송"""
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
     message = {"content": f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {str(msg)}"}
     requests.post(DISCORD_WEBHOOK_URL, data=message)
     print(message)
@@ -101,7 +103,7 @@ def get_access_token(APP_KEY, APP_SECRET, URL_BASE):
     res = requests.post(URL, headers=headers, data=json.dumps(body))
     if res.status_code == 200:
         ACCESS_TOKEN = res.json()["access_token"]
-        token_issue_time = datetime.datetime.now()
+        token_issue_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
         return ACCESS_TOKEN
     else:
         raise Exception("Failed to get access token")
@@ -109,7 +111,7 @@ def get_access_token(APP_KEY, APP_SECRET, URL_BASE):
 def ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE):
     """토큰의 유효성을 보장하고 필요시 갱신"""
     global ACCESS_TOKEN, token_issue_time
-    if ACCESS_TOKEN is None or (datetime.datetime.now() - token_issue_time).total_seconds() >= TOKEN_VALIDITY_DURATION:
+    if ACCESS_TOKEN is None or (datetime.datetime.now(pytz.timezone('Asia/Seoul')) - token_issue_time).total_seconds() >= TOKEN_VALIDITY_DURATION:
         ACCESS_TOKEN = get_access_token(APP_KEY, APP_SECRET, URL_BASE)
 
 def hashkey(datas, APP_KEY, APP_SECRET, URL_BASE):
@@ -124,6 +126,24 @@ def hashkey(datas, APP_KEY, APP_SECRET, URL_BASE):
     res = requests.post(URL, headers=headers, data=json.dumps(datas))
     hashkey = res.json()["HASH"]
     return hashkey
+
+def reset_database():
+    cursor.execute('DROP TABLE IF EXISTS price_info')
+    cursor.execute('''
+    CREATE TABLE price_info (
+        time_key TEXT,
+        stock_code TEXT,
+        high INTEGER,
+        low INTEGER,
+        open INTEGER,
+        close INTEGER,
+        volume INTEGER,
+        PRIMARY KEY (time_key, stock_code)
+    )
+    ''')
+    conn.commit()
+
+
 
 def get_current_price_and_volume(code, APP_KEY, APP_SECRET, URL_BASE):
     """현재가와 누적 거래량 조회"""
@@ -158,7 +178,7 @@ def get_previous_row(stock_code, current_hour_key):
     return cursor.fetchone()
 
 def get_target_price_change(stock_code):
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
     current_hour_key = now.strftime('%Y-%m-%d %H')
 
     if now.hour == 9:
@@ -189,7 +209,7 @@ def get_target_price_change(stock_code):
     
 
 def sell_target_price_change(stock_code):
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
     current_hour_key = now.strftime('%Y-%m-%d %H')
 
     if now.hour == 9:
@@ -217,7 +237,6 @@ def sell_target_price_change(stock_code):
         return target_price
     else:
         return None
-
 
 
 def get_target_price_ma(stock_code):
@@ -267,6 +286,35 @@ def update_price_info(current_price, current_volume, current_time, stock_code):
         ''', (current_price, current_price, current_price, volume, time_key, stock_code))
         conn.commit()
 
+def fetch_recent_5_hours_data(stock_code):
+    try:
+        now=datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+        stock = yf.Ticker(stock_code+'.KS')
+        data = stock.history(start=now-datetime.timedelta(days=4), end=now, interval="1h")
+        if data.empty:
+            stock = yf.Ticker(stock_code+'.KQ')
+            data = stock.history(start=now-datetime.timedelta(days=4), end=now, interval="1h")
+            st.write(f'{stock_code} is not in KOSPI')
+            if data.empty:
+                st.write(f"No data fetched for {stock_code}")
+    except Exception as e:
+        st.error(f"Error fetching data for {stock_code}: {e}")
+
+    data=data.tail(7)[:-1]
+    for idx, row in data.iterrows():
+        time_key = idx.strftime('%Y-%m-%d %H')
+        open_price = row['Open']
+        high_price = row['High']
+        low_price = row['Low']
+        close_price = row['Close']
+        volume = row['Volume']
+        
+        cursor.execute('''
+        INSERT OR REPLACE INTO price_info (time_key, stock_code, high, low, open, close, volume)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (time_key, stock_code, high_price, low_price, open_price, close_price, volume))
+    
+    conn.commit()
 
 def get_stock_balance(APP_KEY, APP_SECRET, URL_BASE):
     """주식 잔고조회"""
@@ -400,8 +448,29 @@ def sell(code, qty, APP_KEY, APP_SECRET, URL_BASE):
         send_message(f"[매도 실패]{str(res.json())}", DISCORD_WEBHOOK_URL)
         return False
 
+
 # Streamlit UI
 st.title('자동 주식 매매 프로그램')
+
+if st.button('작업 시작'):
+    response = requests.post('http://localhost:5000/start_task', json={"param": "some_parameter"})
+    if response.status_code == 202:
+        task_id = response.json().get("task_id")
+        st.success(f'작업이 시작되었습니다. 작업 ID: {task_id}')
+    else:
+        st.error('작업 시작 중 오류가 발생했습니다.')
+
+task_id_input = st.text_input('작업 ID 입력')
+if st.button('작업 상태 확인'):
+    if task_id_input:
+        response = requests.get(f'http://localhost:5000/task_status/{task_id_input}')
+        if response.status_code == 200:
+            status = response.json()
+            st.write(status)
+        else:
+            st.error('작업 상태 확인 중 오류가 발생했습니다.')
+    else:
+        st.error('작업 ID를 입력하세요.')
 
 # 사용자 정보 입력
 APP_KEY = st.text_input('APP_KEY', value='')
@@ -445,72 +514,101 @@ if st.button('종목 데이터 조회'):
     except Exception as e:
         st.error(f'종목 데이터를 가져오는 데 오류가 발생했습니다: {e}')
 
+if st.button('최근 5시간 데이터 미리 가져오기'):
+    try:
+        fetch_recent_5_hours_data(stock_code)
+        st.write('최근 5시간의 데이터가 성공적으로 DB에 저장되었습니다.')
+    except Exception as e:
+        st.error(f'최근 5시간의 데이터를 가져오는 데 오류가 발생했습니다: {e}')
+
+# DB 초기화 버튼
+if st.button('DB 초기화'):
+    try:
+        reset_database()
+        st.write('데이터베이스가 초기화되었습니다.')
+    except Exception as e:
+        st.error(f'데이터베이스 초기화 중 오류가 발생했습니다: {e}')
+
+if 'stop' not in st.session_state:
+    st.session_state.stop = False
+
+def stop_button_callback():
+    st.session_state.stop = True
 
 if st.button('자동매매 시작'):
+    bought = False
     try:
         ensure_token_valid(APP_KEY, APP_SECRET, URL_BASE)
         total_cash = get_balance(APP_KEY, APP_SECRET, URL_BASE)
-        bought = False
-        bought_time = None
         buy_price = 0
         sell_price = 0
         total_profit = 0
+        st.session_state.stop = False
 
         st.write('===국내 주식 자동매매 프로그램을 시작합니다===')
         send_message('===국내 주식 자동매매 프로그램을 시작합니다===', DISCORD_WEBHOOK_URL)
         
         profit_display = st.sidebar.empty()
-
+        stop_button_placeholder = st.empty()
+        stop_button_placeholder.button('종료', key='stop_button', on_click=stop_button_callback)
+        
         while True:
-            loop_start_time = datetime.datetime.now()
+            if st.session_state.stop:
+                send_message(f"현재 시각: {datetime.datetime.now(pytz.timezone('Asia/Seoul'))} \n 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
+                break
 
-            t_now = datetime.datetime.now()
+            loop_start_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
+
+            t_now = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
             t_start = t_now.replace(hour=9, minute=0, second=0, microsecond=0)
             t_sell = t_now.replace(hour=15, minute=00, second=0, microsecond=0)
             t_end = t_now.replace(hour=15, minute=20, second=0, microsecond=0)
-            today = datetime.datetime.today().weekday()
+            today = t_now.weekday()
 
-            if today in [5, 6]:  # 토요일이나 일요일이면 자동 종료
-                send_message("주말이므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
+            if today in [5]:  # 토요일이면 자동 종료
+                send_message("토요일이므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
                 break
 
-            if t_now >= t_end:
-                send_message("오후 3시가 지났습니다.", DISCORD_WEBHOOK_URL)
+            if (t_now >= t_end + datetime.timedelta(minutes=30)) or (t_now<=t_start-datetime.timedelta(hours=1)):
+                send_message(f"현재 시각: {t_now} \n 장이 마감되었으므로 프로그램을 종료합니다.", DISCORD_WEBHOOK_URL)
+                break
 
-            current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
-            update_price_info(current_price, current_volume, t_now, stock_code)
+            if t_start <= t_now <= t_sell:
+                current_price, current_volume = get_current_price_and_volume(stock_code, APP_KEY, APP_SECRET, URL_BASE)
+                update_price_info(current_price, current_volume, t_now, stock_code)
 
             current_hour_key = t_now.strftime('%Y-%m-%d %H')  # current_hour_key 할당
 
+            # 매수
             if t_start < t_now < t_sell and not bought:
                 target_price = get_target_price_change(stock_code)
                 model_prediction = get_model_prediction(stock_code, current_hour_key)
 
-                if target_price and target_price < current_price and current_price < model_prediction[0][0]:
-                    buy_qty = int(total_cash // current_price)
+                if target_price and target_price < current_price and current_price < int(model_prediction[0][0]):
+                    send_message("매수 신호 발생", DISCORD_WEBHOOK_URL)
+                    buy_qty = int(total_cash*0.9 // int(current_price))
                     if buy_qty > 0:
                         result = buy(stock_code, buy_qty, APP_KEY, APP_SECRET, URL_BASE)
                         if result:
                             bought = True
-                            buy_price = current_price
-                            # 매도 시간을 현재 시간의 마지막 초로 설정
-                            bought_time = t_now.replace(minute=59, second=59)
+                            buy_price = int(current_price)
                             send_message(f"{stock_code} 매수 완료", DISCORD_WEBHOOK_URL)
                             st.write(f"{stock_code} 매수 완료")
 
-            sell_price = get_target_price_change(stock_code)
+            sell_price = sell_target_price_change(stock_code)
 
-            # 특정 시간의 마지막 초에 매도
-            if bought and (target_price <= sell_price or current_price > model_prediction[0][0]):
+            # 매도
+            if bought and (target_price <= sell_price or current_price > int(model_prediction[0][0])):
                 stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE)
                 qty = stock_dict.get(stock_code, 0)
+                send_message("매도 신호 발생", DISCORD_WEBHOOK_URL)
                 if qty:
                     qty = int(qty)
                 if qty > 0:
                     result = sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE)
                     if result:
                         bought = False
-                        sell_price = current_price
+                        sell_price = int(current_price)
                         profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
                         total_profit += profit
                         send_message(f"{stock_code} 매도 완료", DISCORD_WEBHOOK_URL)
@@ -531,16 +629,29 @@ if st.button('자동매매 시작'):
             # 수익률 표시
             profit_display.write(f"오늘의 수익률: {total_profit:.2f}%")
 
-            loop_end_time = datetime.datetime.now()
+            loop_end_time = datetime.datetime.now(pytz.timezone('Asia/Seoul'))
             elapsed_time = (loop_end_time - loop_start_time).total_seconds()
             sleep_time = max(5 - elapsed_time, 0)
 
             time.sleep(sleep_time)
 
     except Exception as e:
-        send_message(f"[오류 발생]{e}", DISCORD_WEBHOOK_URL)
-        st.error(f"오류 발생: {e}")
+            send_message(f"[오류 발생]{e}", DISCORD_WEBHOOK_URL)
+            st.error(f"오류 발생: {e}")
 
     finally:
+        if bought:
+                stock_dict = get_stock_balance(APP_KEY, APP_SECRET, URL_BASE)
+                qty = stock_dict.get(stock_code, 0)
+                if qty > 0:
+                    sell(stock_code, qty, APP_KEY, APP_SECRET, URL_BASE)
+                    bought = False
+                    sell_price = current_price
+                    profit = ((sell_price - buy_price) / buy_price) * 100 - 0.2
+                    total_profit += profit
+                    send_message(f"강제 매도: {stock_code}", DISCORD_WEBHOOK_URL)
+                    st.write(f"강제 매도: {stock_code}")
         send_message("프로그램이 종료되었습니다.", DISCORD_WEBHOOK_URL)
         st.write("프로그램이 종료되었습니다.")
+        st.session_state.stop = False  # Reset stop state
+        stop_button_placeholder.empty()  # 종료 버튼 제거
