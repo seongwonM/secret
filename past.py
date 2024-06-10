@@ -332,7 +332,7 @@ if st.button('🚀 자동매매 시작'):
         sleep_time = max(1/p - elapsed_time, 0)
         time.sleep(sleep_time)
 
-    st.write(f"배속: 약 {p}배")
+    st.write(f"배속: 약 {60*p}배")
     st.write(f"총 소요 시간: {datetime.datetime.now()-now}")
     st.write(f"기존 소요됐어야 하는 시간: {j//60}시간 {j%60//60}분")
 
