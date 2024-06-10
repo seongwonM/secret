@@ -19,15 +19,7 @@ cursor = conn.cursor()
 st.set_page_config(
     page_title="자동 주식 매매 프로그램",
     layout="centered",
-    initial_sidebar_state="auto",
-    menu_items={
-        'Get help': 'https://github.com/lucaseo/streamlit_app_stockprice_downloader',
-        'Report a bug': 'https://github.com/lucaseo/streamlit_app_stockprice_downloader/issues',
-        'About': '''
-        ## Stock price downloader
-        Download stock price data in US, South Korean stock market
-        '''
-    }
+    initial_sidebar_state="auto"
 )
 
 st.title('📈 자동 주식 매매 프로그램')
@@ -340,7 +332,7 @@ if st.button('🚀 자동매매 시작'):
         sleep_time = max(1/p - elapsed_time, 0)
         time.sleep(sleep_time)
 
-    st.write(f"배속: 약 {p*60}배")
+    st.write(f"배속: 약 {60*p}배")
     st.write(f"총 소요 시간: {datetime.datetime.now()-now}")
     st.write(f"기존 소요됐어야 하는 시간: {j//60}시간 {j%60//60}분")
 
